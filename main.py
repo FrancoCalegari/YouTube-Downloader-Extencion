@@ -36,12 +36,12 @@ GREEN_OK   = "#22c55e"
 YELLOW_W   = "#f59e0b"
 BLUE_INFO  = "#38bdf8"
 
-# ── YouTube URL regex ─────────────────────────────────────────────────────────
+# ── YouTube / YouTube Music URL regex ─────────────────────────────────────────
 YOUTUBE_RE = re.compile(
-    r'(https?://)?(www\.)?'
-    r'(youtube\.com/(watch|shorts|embed|v)/|youtu\.be/)'
-    r'[\w\-]{1,20}'
-    r'([?&]\S*)?'
+    r'^(https?://)?((www|music|m)\.)?'
+    r'(youtube\.com/(watch|shorts|embed|v|playlist|browse|channel|user)?|youtu\.be/)'
+    r'[\S]+$',
+    re.IGNORECASE
 )
 
 
@@ -417,7 +417,7 @@ class YouTubeDownloader(ctk.CTk):
         )
         self.load_btn.grid(row=0, column=1)
 
-        body_label(url_card, "  Admite: youtube.com/watch  ·  youtu.be  ·  /shorts").grid(
+        body_label(url_card, "  Admite: youtube.com  ·  music.youtube.com  ·  youtu.be  ·  shorts").grid(
             row=3, column=0, padx=14, pady=(0, 12), sticky="w")
 
         # ── Destination Card ──────────────────────────────────────────────────
@@ -723,9 +723,10 @@ class YouTubeDownloader(ctk.CTk):
         if not YOUTUBE_RE.search(url):
             messagebox.showwarning(
                 "ENLACE INVÁLIDO",
-                "Ingresa una URL válida de YouTube.\n\n"
+                "Ingresa una URL válida de YouTube o YouTube Music.\n\n"
                 "Formatos admitidos:\n"
                 "  · https://www.youtube.com/watch?v=...\n"
+                "  · https://music.youtube.com/watch?v=...\n"
                 "  · https://youtu.be/...\n"
                 "  · https://www.youtube.com/shorts/..."
             )

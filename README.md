@@ -15,7 +15,7 @@
 | 📊 Progreso en tiempo real | Barra de progreso con velocidad y tiempo restante |
 | 📁 Carpeta personalizable | Elige dónde guardar los archivos |
 | 🖱️ Barra de desplazamiento | La interfaz es totalmente scrollable, apta para pantallas pequeñas |
-| ✅ Formatos soportados | `youtube.com/watch`, `youtu.be`, `youtube.com/shorts` |
+| ✅ Formatos soportados | `youtube.com/watch`, `music.youtube.com`, `youtu.be`, `youtube.com/shorts` |
 
 ---
 
