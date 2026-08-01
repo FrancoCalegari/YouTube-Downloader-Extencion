@@ -36,13 +36,31 @@ GREEN_OK   = "#22c55e"
 YELLOW_W   = "#f59e0b"
 BLUE_INFO  = "#38bdf8"
 
-# ── YouTube / YouTube Music URL regex ─────────────────────────────────────────
-YOUTUBE_RE = re.compile(
-    r'^(https?://)?((www|music|m)\.)?'
-    r'(youtube\.com/(watch|shorts|embed|v|playlist|browse|channel|user)?|youtu\.be/)'
-    r'[\S]+$',
+# ── Multi-platform URL detection ─────────────────────────────────────────────
+SUPPORTED_RE = re.compile(
+    r'^(https?://)?('
+    # YouTube / YouTube Music
+    r'((www|music|m)\.)?youtube\.com/(watch|shorts|embed|v|playlist|browse|channel|user)?'
+    r'|youtu\.be/'
+    # TikTok
+    r'|(www\.)?tiktok\.com/@[\w.]+/video/'
+    r'|vm\.tiktok\.com/'
+    r'|vt\.tiktok\.com/'
+    # Instagram
+    r'|(www\.)?instagram\.com/(reels?|p|tv)/'
+    r')[\S]*$',
     re.IGNORECASE
 )
+
+
+def detect_platform(url: str) -> str:
+    """Return 'youtube', 'tiktok', or 'instagram' based on the URL."""
+    u = url.lower()
+    if 'tiktok.com' in u:
+        return 'tiktok'
+    if 'instagram.com' in u:
+        return 'instagram'
+    return 'youtube'
 
 
 def get_downloads_dir() -> str:
@@ -94,7 +112,7 @@ class AnimatedTitle(ctk.CTkCanvas):
 
         # Subtitle eyebrow — monospace tag
         sub_color = f"#{int(0x33 + t * 0x22):02x}0000"
-        self.create_text(cx, 54, text="// VIDEO DOWNLOADER  ·  GABODEV",
+        self.create_text(cx, 54, text="// YT · TK · IG  —  MULTI-PLATFORM  ·  GABODEV",
                          font=("Courier New", 8),
                          fill=sub_color, anchor="center")
 
@@ -320,9 +338,9 @@ class YouTubeDownloader(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        self.title("YT DOWNLOADER  //  GABODEV")
-        self.geometry("560x820")
-        self.minsize(480, 580)
+        self.title("MULTI DOWNLOADER  //  GABODEV")
+        self.geometry("560x860")
+        self.minsize(480, 620)
         self.configure(fg_color=BLACK)
         self.resizable(True, True)
 
@@ -330,6 +348,9 @@ class YouTubeDownloader(ctk.CTk):
         self.download_dir    = get_downloads_dir()
         self._is_downloading = False
         self._open_btn_shown = False
+        self._platform       = "auto"   # 'auto' | 'youtube' | 'tiktok' | 'instagram'
+        self._cookie_browser = "NINGUNO" # browser to pull cookies from
+        self._cookie_file    = ""        # optional path to cookies.txt
 
         self._setup_ui()
 
@@ -357,19 +378,19 @@ class YouTubeDownloader(ctk.CTk):
         hud_bar.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
-            hud_bar, text="◀  SISTEMA DE DESCARGA",
+            hud_bar, text="◀  SISTEMA DE DESCARGA  //  YT · TK · IG",
             text_color=RED,
             font=("Courier New", 8),
         ).grid(row=0, column=0, padx=12, pady=6, sticky="w")
 
         ctk.CTkLabel(
-            hud_bar, text="GABODEV  //  v2.0",
+            hud_bar, text="GABODEV  //  v3.0",
             text_color="#2a0000",
             font=("Courier New", 8),
         ).grid(row=0, column=2, padx=12, pady=6, sticky="e")
 
         # ── Animated header ───────────────────────────────────────────────────
-        self.animated_title = AnimatedTitle(sf, text="YT DOWNLOADER")
+        self.animated_title = AnimatedTitle(sf, text="MULTI DOWNLOADER")
         self.animated_title.grid(row=1, column=0, sticky="ew",
                                  padx=0, pady=(0, 0))
 
@@ -394,17 +415,43 @@ class YouTubeDownloader(ctk.CTk):
         CardHeader(url_card, label="INPUT.URL").grid(
             row=0, column=0, sticky="ew")
 
+        # ── Platform selector ─────────────────────────────────────────────────
+        plat_row = ctk.CTkFrame(url_card, fg_color="transparent", corner_radius=0)
+        plat_row.grid(row=1, column=0, padx=14, pady=(10, 0), sticky="ew")
+        plat_row.grid_columnconfigure(1, weight=1)
+
+        tac_label(plat_row, "// Plataforma").grid(row=0, column=0, sticky="w", padx=(0, 12))
+
+        self._platform_var = ctk.StringVar(value="AUTO")
+        self._platform_seg = ctk.CTkSegmentedButton(
+            plat_row,
+            values=["AUTO", "YOUTUBE", "TIKTOK", "INSTAGRAM"],
+            variable=self._platform_var,
+            command=self._on_platform_change,
+            height=32,
+            fg_color=GRAY_DARK,
+            selected_color=RED,
+            selected_hover_color=RED_MED,
+            unselected_color=GRAY_DARK,
+            unselected_hover_color=STEEL,
+            text_color=OFF_WHITE,
+            text_color_disabled="#333333",
+            font=("Courier New", 10, "bold"),
+            corner_radius=0,
+        )
+        self._platform_seg.grid(row=0, column=1, sticky="ew")
+
         tac_label(url_card, "// Enlace del video").grid(
-            row=1, column=0, padx=14, pady=(10, 4), sticky="w")
+            row=2, column=0, padx=14, pady=(8, 4), sticky="w")
 
         url_inner = ctk.CTkFrame(url_card, fg_color="transparent",
                                  corner_radius=0)
-        url_inner.grid(row=2, column=0, padx=10, pady=(0, 6), sticky="ew")
+        url_inner.grid(row=3, column=0, padx=10, pady=(0, 6), sticky="ew")
         url_inner.grid_columnconfigure(0, weight=1)
 
         self.url_entry = tac_entry(
             url_inner,
-            placeholder="https://www.youtube.com/watch?v=...",
+            placeholder="youtube.com/...  ·  tiktok.com/@user/video/...  ·  instagram.com/reel/...",
             height=42,
         )
         self.url_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
@@ -417,8 +464,40 @@ class YouTubeDownloader(ctk.CTk):
         )
         self.load_btn.grid(row=0, column=1)
 
-        body_label(url_card, "  Admite: youtube.com  ·  music.youtube.com  ·  youtu.be  ·  shorts").grid(
-            row=3, column=0, padx=14, pady=(0, 12), sticky="w")
+        body_label(url_card, "  Admite: YouTube  ·  YouTube Music  ·  TikTok  ·  Instagram Reels").grid(
+            row=4, column=0, padx=14, pady=(0, 4), sticky="w")
+
+        # ── Cookie auth row (Instagram / TikTok) ────────────────────────────────
+        cookie_row = ctk.CTkFrame(url_card, fg_color="transparent", corner_radius=0)
+        cookie_row.grid(row=5, column=0, padx=14, pady=(0, 12), sticky="ew")
+        cookie_row.grid_columnconfigure(1, weight=1)
+
+        tac_label(cookie_row, "// Cookies del nav").grid(
+            row=0, column=0, sticky="w", padx=(0, 12))
+
+        self._cookie_var = ctk.StringVar(value="NINGUNO")
+        self._cookie_menu = ctk.CTkOptionMenu(
+            cookie_row,
+            variable=self._cookie_var,
+            values=["NINGUNO", "CHROME", "FIREFOX", "EDGE", "BRAVE", "OPERA", "ARCHIVO .TXT"],
+            command=self._on_cookie_change,
+            height=30,
+            fg_color=GRAY_DARK,
+            button_color=STEEL,
+            button_hover_color=RED,
+            text_color=OFF_WHITE,
+            font=("Courier New", 10),
+            corner_radius=0,
+            dynamic_resizing=False,
+            width=140,
+        )
+        self._cookie_menu.grid(row=0, column=1, sticky="w")
+
+        self._cookie_hint = body_label(
+            cookie_row,
+            "  ℹ️  Requerido para Instagram (Cierra Chrome si está abierto)",
+        )
+        self._cookie_hint.grid(row=0, column=2, padx=(10, 0), sticky="w")
 
         # ── Destination Card ──────────────────────────────────────────────────
         dest_card = TacticalCard(sf)
@@ -658,7 +737,7 @@ class YouTubeDownloader(ctk.CTk):
         footer.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
-            footer, text="// GABODEV  ·  POWERED BY YT-DLP",
+            footer, text="// GABODEV  ·  YT · TK · IG  ·  POWERED BY YT-DLP",
             text_color="#2a0000",
             font=("Courier New", 8),
         ).grid(row=0, column=0, padx=14, pady=8, sticky="w")
@@ -697,12 +776,65 @@ class YouTubeDownloader(ctk.CTk):
         except Exception as exc:
             print(f"Cannot open folder: {exc}")
 
+    def _on_cookie_change(self, value: str):
+        self._cookie_browser = value
+        if value == "ARCHIVO .TXT":
+            chosen = filedialog.askopenfilename(
+                title="Selecciona archivo cookies.txt",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+            )
+            if chosen:
+                self._cookie_file = chosen
+                self._cookie_hint.configure(text=f"  📄 {os.path.basename(chosen)}")
+            else:
+                self._cookie_var.set("NINGUNO")
+                self._cookie_browser = "NINGUNO"
+                self._cookie_file = ""
+                self._cookie_hint.configure(text="  ℹ️  Requerido para Instagram (Cierra Chrome si está abierto)")
+        else:
+            self._cookie_file = ""
+            self._cookie_hint.configure(text="  ℹ️  Requerido para Instagram (Cierra Chrome si está abierto)")
+
+    def _get_cookie_opt(self):
+        """Return cookiesfrombrowser tuple for yt-dlp, or None."""
+        mapping = {
+            "CHROME":  "chrome",
+            "FIREFOX": "firefox",
+            "EDGE":    "edge",
+            "BRAVE":   "brave",
+            "OPERA":   "opera",
+        }
+        browser = mapping.get(self._cookie_browser)
+        return (browser,) if browser else None
+
+    def _on_platform_change(self, value: str):
+        """Called when the platform segmented button changes."""
+        self._platform = value.lower()
+        # Quality menu only makes sense for YouTube
+        is_yt = self._platform in ("auto", "youtube")
+        self.quality_menu.configure(
+            state="normal" if is_yt else "disabled",
+            text_color=OFF_WHITE if is_yt else "#444444",
+        )
+
+    def _resolve_platform(self, url: str) -> str:
+        """Return actual platform string, resolving 'auto' via URL detection."""
+        if self._platform != "auto":
+            return self._platform
+        return detect_platform(url)
+
     def _set_action_buttons(self, enabled: bool):
         state = "normal" if enabled else "disabled"
         self.dl_video_btn.configure(state=state)
         self.dl_audio_btn.configure(state=state)
         self.load_btn.configure(state=state)
-        self.quality_menu.configure(state=state)
+        # Quality menu only enabled for YouTube
+        url = self.url_entry.get().strip()
+        plat = self._resolve_platform(url)
+        if enabled and plat != "youtube":
+            self.quality_menu.configure(state="disabled", text_color="#444444")
+        else:
+            self.quality_menu.configure(state=state, text_color=OFF_WHITE if enabled else "#444444")
         self.audio_quality_menu.configure(state=state)
 
     @staticmethod
@@ -720,17 +852,30 @@ class YouTubeDownloader(ctk.CTk):
         if not url:
             self.status_badge.set("error", "INGRESA UN ENLACE")
             return
-        if not YOUTUBE_RE.search(url):
+
+        # If platform is forced, skip regex validation (yt-dlp will handle it)
+        if self._platform == "auto" and not SUPPORTED_RE.search(url):
             messagebox.showwarning(
                 "ENLACE INVÁLIDO",
-                "Ingresa una URL válida de YouTube o YouTube Music.\n\n"
+                "Ingresa una URL válida de una plataforma admitida.\n\n"
                 "Formatos admitidos:\n"
                 "  · https://www.youtube.com/watch?v=...\n"
                 "  · https://music.youtube.com/watch?v=...\n"
                 "  · https://youtu.be/...\n"
-                "  · https://www.youtube.com/shorts/..."
+                "  · https://www.youtube.com/shorts/...\n"
+                "  · https://www.tiktok.com/@user/video/...\n"
+                "  · https://vm.tiktok.com/...\n"
+                "  · https://www.instagram.com/reel/..."
             )
             return
+
+        # Update quality menu state based on platform
+        plat = self._resolve_platform(url)
+        is_yt = plat == "youtube"
+        self.quality_menu.configure(
+            state="normal" if is_yt else "disabled",
+            text_color=OFF_WHITE if is_yt else "#444444",
+        )
 
         self.load_btn.configure(state="disabled", text="CARGANDO...")
         self.status_badge.set("loading")
@@ -740,6 +885,8 @@ class YouTubeDownloader(ctk.CTk):
 
     def _fetch_info(self, url: str):
         try:
+            plat = self._resolve_platform(url)
+
             ydl_opts = {
                 "quiet":         True,
                 "no_warnings":   True,
@@ -752,10 +899,22 @@ class YouTubeDownloader(ctk.CTk):
                     ),
                     "Accept-Language": "en-US,en;q=0.9",
                 },
-                "extractor_args": {
-                    "youtube": {"player_client": ["web", "android"]}
-                },
             }
+
+            # YouTube-specific extractor args
+            if plat == "youtube":
+                ydl_opts["extractor_args"] = {
+                    "youtube": {"player_client": ["web", "android"]}
+                }
+
+            # Cookie auth (required for Instagram, sometimes TikTok)
+            if self._cookie_file:
+                ydl_opts["cookiefile"] = self._cookie_file
+            else:
+                cookie_opt = self._get_cookie_opt()
+                if cookie_opt:
+                    ydl_opts["cookiesfrombrowser"] = cookie_opt
+
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 info = ydl.extract_info(url, download=False)
 
@@ -803,7 +962,7 @@ class YouTubeDownloader(ctk.CTk):
         except Exception as exc:
             import traceback
             traceback.print_exc()
-            self.after(0, lambda: self._on_fetch_error(str(exc)))
+            self.after(0, lambda e=exc: self._on_fetch_error(str(e)))
 
     def _show_info(self, title: str, ctk_img, q_opts: list,
                    channel: str, duration: str):
@@ -827,11 +986,28 @@ class YouTubeDownloader(ctk.CTk):
     def _on_fetch_error(self, msg: str):
         self.load_btn.configure(state="normal", text="CARGAR")
         self.status_badge.set("error")
-        messagebox.showerror(
-            "ERROR DE CARGA",
-            "Asegúrate de que el enlace sea correcto y tengas conexión.\n\n"
-            f"Detalle: {msg[:300]}"
-        )
+
+        if "Could not copy Chrome cookie database" in msg or "Permission denied" in msg or "cookie" in msg.lower() and "permission" in msg.lower():
+            detail = (
+                "⚠️ ERROR DE PERMISOS DE COOKIES:\n\n"
+                "Google Chrome o Edge está ABIERTO y bloquea el archivo de cookies.\n\n"
+                "Soluciones:\n"
+                " 1. Cierra completamente el navegador (Chrome / Edge).\n"
+                " 2. O selecciona 'FIREFOX' en Cookies (Firefox no bloquea el archivo).\n"
+                " 3. O selecciona 'ARCHIVO .TXT' y usa un archivo de cookies exportado."
+            )
+        elif "empty media response" in msg.lower() or "login" in msg.lower():
+            detail = (
+                "⚠️ INSTAGRAM REQUIERE AUTENTICACIÓN:\n\n"
+                "Instagram no permite ver este video de forma anónima.\n\n"
+                "Solución:\n"
+                " Selecciona tu navegador en '// Cookies del nav' (ej. CHROME o FIREFOX) "
+                "donde tengas la sesión de Instagram iniciada, y si usas Chrome, ciérralo antes de pulsar Cargar."
+            )
+        else:
+            detail = f"Asegúrate de que el enlace sea correcto y tengas conexión.\n\nDetalle: {msg[:350]}"
+
+        messagebox.showerror("ERROR DE CARGA", detail)
 
     # ── Download ──────────────────────────────────────────────────────────────
     def _start_download(self, audio_only: bool):
@@ -901,14 +1077,22 @@ class YouTubeDownloader(ctk.CTk):
         raw_audio_q = self.audio_quality_var.get().split("k")[0].strip()
         audio_bitrate = raw_audio_q if raw_audio_q.isdigit() else "192"
 
+        plat = self._resolve_platform(url)
+
+        # ── Format selection ──────────────────────────────────────────────────
         if audio_only:
             fmt = "bestaudio/best"
-        elif quality == "Mejor disponible":
-            fmt = "bestvideo+bestaudio/best"
-        elif quality.endswith("p") and quality[:-1].isdigit():
-            h   = quality[:-1]
-            fmt = f"bestvideo[height<={h}]+bestaudio/best[height<={h}]/best[height<={h}]"
+        elif plat == "youtube":
+            # YouTube: honour user-selected resolution
+            if quality == "Mejor disponible":
+                fmt = "bestvideo+bestaudio/best"
+            elif quality.endswith("p") and quality[:-1].isdigit():
+                h   = quality[:-1]
+                fmt = f"bestvideo[height<={h}]+bestaudio/best[height<={h}]/best[height<={h}]"
+            else:
+                fmt = "bestvideo+bestaudio/best"
         else:
+            # TikTok / Instagram: just grab the best available
             fmt = "bestvideo+bestaudio/best"
 
         outtmpl = os.path.join(self.download_dir, "%(title)s.%(ext)s")
@@ -934,12 +1118,23 @@ class YouTubeDownloader(ctk.CTk):
             "quiet":               True,
             "no_warnings":         True,
             "http_headers":        http_headers,
-            "extractor_args":      {
-                "youtube": {"player_client": ["web", "android"]}
-            },
             "nocheckcertificate":  False,
             "socket_timeout":      30,
         }
+
+        # YouTube-specific extractor args
+        if plat == "youtube":
+            ydl_opts["extractor_args"] = {
+                "youtube": {"player_client": ["web", "android"]}
+            }
+
+        # Cookie auth (required for Instagram, sometimes TikTok)
+        if self._cookie_file:
+            ydl_opts["cookiefile"] = self._cookie_file
+        else:
+            cookie_opt = self._get_cookie_opt()
+            if cookie_opt:
+                ydl_opts["cookiesfrombrowser"] = cookie_opt
 
         if audio_only:
             ydl_opts["postprocessors"] = [{
