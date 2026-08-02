@@ -14,6 +14,21 @@ import requests
 import yt_dlp
 from PIL import Image
 
+
+# ── Auto-update yt-dlp in background ──────────────────────────────────────────
+def _check_ytdlp_update():
+    """Silently updates yt-dlp if outdated; called in a daemon thread."""
+    try:
+        import subprocess as _sp
+        _sp.run(
+            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp", "--quiet"],
+            capture_output=True, timeout=60
+        )
+    except Exception:
+        pass
+
+threading.Thread(target=_check_ytdlp_update, daemon=True).start()
+
 # ── Appearance ────────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("Dark")
 ctk.set_default_color_theme("dark-blue")
@@ -987,7 +1002,8 @@ class YouTubeDownloader(ctk.CTk):
         self.load_btn.configure(state="normal", text="CARGAR")
         self.status_badge.set("error")
 
-        if "Could not copy Chrome cookie database" in msg or "Permission denied" in msg or "cookie" in msg.lower() and "permission" in msg.lower():
+        ml = msg.lower()
+        if "Could not copy" in msg or ("permission" in ml and "cookie" in ml):
             detail = (
                 "⚠️ ERROR DE PERMISOS DE COOKIES:\n\n"
                 "Google Chrome o Edge está ABIERTO y bloquea el archivo de cookies.\n\n"
@@ -996,16 +1012,21 @@ class YouTubeDownloader(ctk.CTk):
                 " 2. O selecciona 'FIREFOX' en Cookies (Firefox no bloquea el archivo).\n"
                 " 3. O selecciona 'ARCHIVO .TXT' y usa un archivo de cookies exportado."
             )
-        elif "empty media response" in msg.lower() or "login" in msg.lower():
+        elif "empty media response" in ml or ("login" in ml and "instagram" in ml):
             detail = (
                 "⚠️ INSTAGRAM REQUIERE AUTENTICACIÓN:\n\n"
-                "Instagram no permite ver este video de forma anónima.\n\n"
-                "Solución:\n"
-                " Selecciona tu navegador en '// Cookies del nav' (ej. CHROME o FIREFOX) "
-                "donde tengas la sesión de Instagram iniciada, y si usas Chrome, ciérralo antes de pulsar Cargar."
+                "Instagram bloqueó la descarga. Posibles causas:\n\n"
+                " 1. yt-dlp desactualizado (la app lo actualiza al iniciar; "
+                "reinicia la aplicación y reintenta).\n"
+                " 2. El Reel es privado o requiere inicio de sesión.\n\n"
+                "Si el Reel es público, selecciona tu navegador en\n"
+                "'// Cookies del nav' y reintenta."
             )
         else:
-            detail = f"Asegúrate de que el enlace sea correcto y tengas conexión.\n\nDetalle: {msg[:350]}"
+            detail = (
+                f"Asegúrate de que el enlace sea correcto y tengas conexión.\n\n"
+                f"Detalle: {msg[:350]}"
+            )
 
         messagebox.showerror("ERROR DE CARGA", detail)
 
