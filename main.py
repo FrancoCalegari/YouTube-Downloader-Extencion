@@ -14,15 +14,23 @@ import requests
 import yt_dlp
 from PIL import Image
 
+try:
+    from curl_cffi import requests as creqs
+except ImportError:
+    creqs = None
 
-# ── Auto-update yt-dlp in background ──────────────────────────────────────────
+
+# ── Auto-update yt-dlp and curl_cffi in background ───────────────────────────
 def _check_ytdlp_update():
-    """Silently updates yt-dlp if outdated; called in a daemon thread."""
+    """Silently updates yt-dlp and curl_cffi if outdated; called in a daemon thread.
+    curl_cffi is required by the Kick extractor (impersonate=True / TLS fingerprinting).
+    """
     try:
         import subprocess as _sp
         _sp.run(
-            [sys.executable, "-m", "pip", "install", "-U", "yt-dlp", "--quiet"],
-            capture_output=True, timeout=60
+            [sys.executable, "-m", "pip", "install", "-U",
+             "yt-dlp", "curl_cffi", "--quiet"],
+            capture_output=True, timeout=90
         )
     except Exception:
         pass
@@ -63,19 +71,127 @@ SUPPORTED_RE = re.compile(
     r'|vt\.tiktok\.com/'
     # Instagram
     r'|(www\.)?instagram\.com/(reels?|p|tv)/'
+    # Kick
+    r'|(www\.)?kick\.com/[\w.-]+/(videos?/[\w-]+|clip/[\w-]+|[\S]*)'
     r')[\S]*$',
     re.IGNORECASE
 )
 
 
 def detect_platform(url: str) -> str:
-    """Return 'youtube', 'tiktok', or 'instagram' based on the URL."""
+    """Return 'youtube', 'tiktok', 'instagram', or 'kick' based on the URL."""
     u = url.lower()
     if 'tiktok.com' in u:
         return 'tiktok'
     if 'instagram.com' in u:
         return 'instagram'
+    if 'kick.com' in u:
+        return 'kick'
     return 'youtube'
+
+
+def resolve_kick_video(url: str) -> dict:
+    """
+    Directly extracts stream master.m3u8, title, thumbnail, duration from Kick
+    bypassing Cloudflare/bot restrictions using curl_cffi.
+    """
+    client = creqs or requests
+    req_kwargs = {"timeout": 15}
+    if creqs:
+        req_kwargs["impersonate"] = "chrome124"
+
+    vod_match = re.search(r'kick\.com/([\w.-]+)/videos?/([\w-]+)', url, re.I)
+    clip_match = re.search(r'kick\.com/(?:[\w.-]+/(?:clips?/|\?clip=)|clip/)([\w-]+)', url, re.I)
+    channel_match = re.search(r'kick\.com/([\w.-]+)/?$', url, re.I)
+
+    if vod_match:
+        channel_slug, video_id = vod_match.group(1), vod_match.group(2)
+        try:
+            api_url = f"https://kick.com/api/v2/channels/{channel_slug}/videos"
+            resp = client.get(api_url, **req_kwargs)
+            if resp.status_code == 200:
+                videos = resp.json()
+                target = None
+                for v in videos:
+                    if video_id in str(v.get('slug', '')) or video_id in str(v.get('id', '')):
+                        target = v
+                        break
+                if not target and len(videos) > 0:
+                    target = videos[0]
+
+                if target and target.get('source'):
+                    thumb = target.get('thumbnail', {})
+                    thumb_url = thumb.get('src') if isinstance(thumb, dict) else str(thumb)
+                    return {
+                        'url': target['source'],
+                        'title': target.get('session_title') or f"Kick VOD - {channel_slug}",
+                        'channel': channel_slug,
+                        'thumbnail': thumb_url,
+                        'duration': (target.get('duration') or 0) / 1000,
+                    }
+        except Exception as e:
+            print(f"Kick VOD API error: {e}")
+
+        # Fallback: scrape page HTML for metadata and m3u8
+        try:
+            page_resp = client.get(url, **req_kwargs)
+            if page_resp.status_code == 200:
+                html = page_resp.text
+                og_title = re.search(r'<meta property="og:title" content="(.*?)"', html)
+                og_desc = re.search(r'<meta property="og:description" content="(.*?)"', html)
+                og_img = re.search(r'<meta property="og:image" content="(.*?)"', html)
+                title = (og_desc.group(1) if og_desc else None) or (og_title.group(1) if og_title else f"Kick VOD - {channel_slug}")
+                m3u8_match = re.search(r'(https://stream\.kick\.com/[^\s"\'<>]+\.m3u8)', html)
+                if m3u8_match:
+                    return {
+                        'url': m3u8_match.group(1),
+                        'title': title,
+                        'channel': channel_slug,
+                        'thumbnail': og_img.group(1) if og_img else None,
+                        'duration': None,
+                    }
+        except Exception as e:
+            print(f"Kick HTML scrape error: {e}")
+
+    elif clip_match:
+        clip_id = clip_match.group(1)
+        try:
+            api_url = f"https://kick.com/api/v2/clips/{clip_id}/play"
+            resp = client.get(api_url, **req_kwargs)
+            if resp.status_code == 200:
+                data = resp.json().get('clip', {})
+                return {
+                    'url': data.get('clip_url'),
+                    'title': data.get('title') or "Kick Clip",
+                    'channel': data.get('channel', {}).get('slug') if isinstance(data.get('channel'), dict) else "Kick",
+                    'thumbnail': data.get('thumbnail_url'),
+                    'duration': data.get('duration'),
+                }
+        except Exception as e:
+            print(f"Kick clip API error: {e}")
+
+    elif channel_match:
+        channel_slug = channel_match.group(1)
+        try:
+            api_url = f"https://kick.com/api/v2/channels/{channel_slug}"
+            resp = client.get(api_url, **req_kwargs)
+            if resp.status_code == 200:
+                data = resp.json()
+                playback_url = data.get('playback_url')
+                if playback_url:
+                    ls = data.get('livestream') or {}
+                    return {
+                        'url': playback_url,
+                        'title': ls.get('session_title') or f"Kick Live - {channel_slug}",
+                        'channel': channel_slug,
+                        'thumbnail': (ls.get('thumbnail') or {}).get('url'),
+                        'duration': None,
+                        'is_live': True
+                    }
+        except Exception as e:
+            print(f"Kick live API error: {e}")
+
+    return None
 
 
 def get_downloads_dir() -> str:
@@ -127,7 +243,7 @@ class AnimatedTitle(ctk.CTkCanvas):
 
         # Subtitle eyebrow — monospace tag
         sub_color = f"#{int(0x33 + t * 0x22):02x}0000"
-        self.create_text(cx, 54, text="// YT · TK · IG  —  MULTI-PLATFORM  ·  GABODEV",
+        self.create_text(cx, 54, text="// YT · TK · IG · KK  —  MULTI-PLATFORM  ·  GABODEV",
                          font=("Courier New", 8),
                          fill=sub_color, anchor="center")
 
@@ -393,7 +509,7 @@ class YouTubeDownloader(ctk.CTk):
         hud_bar.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
-            hud_bar, text="◀  SISTEMA DE DESCARGA  //  YT · TK · IG",
+            hud_bar, text="◀  SISTEMA DE DESCARGA  //  YT · TK · IG · KK",
             text_color=RED,
             font=("Courier New", 8),
         ).grid(row=0, column=0, padx=12, pady=6, sticky="w")
@@ -440,7 +556,7 @@ class YouTubeDownloader(ctk.CTk):
         self._platform_var = ctk.StringVar(value="AUTO")
         self._platform_seg = ctk.CTkSegmentedButton(
             plat_row,
-            values=["AUTO", "YOUTUBE", "TIKTOK", "INSTAGRAM"],
+            values=["AUTO", "YOUTUBE", "TIKTOK", "INSTAGRAM", "KICK"],
             variable=self._platform_var,
             command=self._on_platform_change,
             height=32,
@@ -466,7 +582,7 @@ class YouTubeDownloader(ctk.CTk):
 
         self.url_entry = tac_entry(
             url_inner,
-            placeholder="youtube.com/...  ·  tiktok.com/@user/video/...  ·  instagram.com/reel/...",
+            placeholder="youtube.com/...  ·  tiktok.com/@user/video/...  ·  kick.com/user/videos/...",
             height=42,
         )
         self.url_entry.grid(row=0, column=0, sticky="ew", padx=(0, 8))
@@ -479,7 +595,7 @@ class YouTubeDownloader(ctk.CTk):
         )
         self.load_btn.grid(row=0, column=1)
 
-        body_label(url_card, "  Admite: YouTube  ·  YouTube Music  ·  TikTok  ·  Instagram Reels").grid(
+        body_label(url_card, "  Admite: YouTube  ·  YouTube Music  ·  TikTok  ·  Instagram Reels  ·  Kick").grid(
             row=4, column=0, padx=14, pady=(0, 4), sticky="w")
 
         # ── Cookie auth row (Instagram / TikTok) ────────────────────────────────
@@ -752,7 +868,7 @@ class YouTubeDownloader(ctk.CTk):
         footer.grid_columnconfigure(1, weight=1)
 
         ctk.CTkLabel(
-            footer, text="// GABODEV  ·  YT · TK · IG  ·  POWERED BY YT-DLP",
+            footer, text="// GABODEV  ·  YT · TK · IG · KK  ·  POWERED BY YT-DLP",
             text_color="#2a0000",
             font=("Courier New", 8),
         ).grid(row=0, column=0, padx=14, pady=8, sticky="w")
@@ -825,12 +941,17 @@ class YouTubeDownloader(ctk.CTk):
     def _on_platform_change(self, value: str):
         """Called when the platform segmented button changes."""
         self._platform = value.lower()
-        # Quality menu only makes sense for YouTube
-        is_yt = self._platform in ("auto", "youtube")
+        # Quality menu enabled for YouTube and Kick (both support multiple resolutions)
+        is_multi = self._platform in ("auto", "youtube", "kick")
         self.quality_menu.configure(
-            state="normal" if is_yt else "disabled",
-            text_color=OFF_WHITE if is_yt else "#444444",
+            state="normal" if is_multi else "disabled",
+            text_color=OFF_WHITE if is_multi else "#444444",
         )
+        # Kick hint: no auth needed
+        if self._platform == "kick":
+            self._cookie_hint.configure(text="  🟢  Kick no requiere cookies")
+        else:
+            self._cookie_hint.configure(text="  ℹ️  Requerido para Instagram (Cierra Chrome si está abierto)")
 
     def _resolve_platform(self, url: str) -> str:
         """Return actual platform string, resolving 'auto' via URL detection."""
@@ -843,10 +964,9 @@ class YouTubeDownloader(ctk.CTk):
         self.dl_video_btn.configure(state=state)
         self.dl_audio_btn.configure(state=state)
         self.load_btn.configure(state=state)
-        # Quality menu only enabled for YouTube
         url = self.url_entry.get().strip()
         plat = self._resolve_platform(url)
-        if enabled and plat != "youtube":
+        if enabled and plat not in ("youtube", "kick"):
             self.quality_menu.configure(state="disabled", text_color="#444444")
         else:
             self.quality_menu.configure(state=state, text_color=OFF_WHITE if enabled else "#444444")
@@ -880,16 +1000,18 @@ class YouTubeDownloader(ctk.CTk):
                 "  · https://www.youtube.com/shorts/...\n"
                 "  · https://www.tiktok.com/@user/video/...\n"
                 "  · https://vm.tiktok.com/...\n"
-                "  · https://www.instagram.com/reel/..."
+                "  · https://www.instagram.com/reel/...\n"
+                "  · https://kick.com/user/videos/VIDEO-ID\n"
+                "  · https://kick.com/user/clip/CLIP-ID"
             )
             return
 
         # Update quality menu state based on platform
         plat = self._resolve_platform(url)
-        is_yt = plat == "youtube"
+        is_multi = plat in ("youtube", "kick")
         self.quality_menu.configure(
-            state="normal" if is_yt else "disabled",
-            text_color=OFF_WHITE if is_yt else "#444444",
+            state="normal" if is_multi else "disabled",
+            text_color=OFF_WHITE if is_multi else "#444444",
         )
 
         self.load_btn.configure(state="disabled", text="CARGANDO...")
@@ -923,15 +1045,32 @@ class YouTubeDownloader(ctk.CTk):
                 }
 
             # Cookie auth (required for Instagram, sometimes TikTok)
-            if self._cookie_file:
-                ydl_opts["cookiefile"] = self._cookie_file
-            else:
-                cookie_opt = self._get_cookie_opt()
-                if cookie_opt:
-                    ydl_opts["cookiesfrombrowser"] = cookie_opt
+            if plat != "kick":
+                if self._cookie_file:
+                    ydl_opts["cookiefile"] = self._cookie_file
+                else:
+                    cookie_opt = self._get_cookie_opt()
+                    if cookie_opt:
+                        ydl_opts["cookiesfrombrowser"] = cookie_opt
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=False)
+            if plat == "kick":
+                kick_data = resolve_kick_video(url)
+                if not kick_data or not kick_data.get("url"):
+                    raise Exception("No se pudo obtener el stream de Kick. Verifica que el video o canal sea público.")
+
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(kick_data["url"], download=False)
+
+                info["title"] = kick_data.get("title") or info.get("title") or "Kick Video"
+                info["channel"] = kick_data.get("channel") or info.get("uploader") or ""
+                if kick_data.get("thumbnail"):
+                    info["thumbnail"] = kick_data["thumbnail"]
+                if kick_data.get("duration"):
+                    info["duration"] = kick_data["duration"]
+                info["_stream_url"] = kick_data["url"]
+            else:
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
 
             self.video_info = info
 
@@ -1003,7 +1142,30 @@ class YouTubeDownloader(ctk.CTk):
         self.status_badge.set("error")
 
         ml = msg.lower()
-        if "Could not copy" in msg or ("permission" in ml and "cookie" in ml):
+        url = self.url_entry.get().strip().lower()
+        is_kick_url = "kick.com" in url
+
+        if is_kick_url and ("could not copy" in ml or "cookieloaderror" in ml or "failed to load cookies" in ml):
+            detail = (
+                "⚠️ ERROR DE COOKIES CON KICK:\n\n"
+                "El extractor de Kick intentó leer las cookies de Chrome,\n"
+                "pero Chrome está abierto y bloquea el archivo.\n\n"
+                "Soluciones (elige una):\n"
+                " 1. Cambia 'Cookies del nav' a NINGUNO y reintenta.\n"
+                " 2. Cierra Chrome completamente y reintenta.\n"
+                " 3. Selecciona FIREFOX en 'Cookies del nav' (no bloquea).\n\n"
+                "Los VODs de Kick son públicos; no necesitan cookies."
+            )
+        elif is_kick_url and ("403" in ml or "forbidden" in ml):
+            detail = (
+                "⚠️ KICK BLOQUEÓ LA PETICIÓN (403 Forbidden):\n\n"
+                "Kick requiere emulación de navegador (TLS fingerprinting).\n"
+                "Para solucionarlo instala la dependencia faltante:\n\n"
+                "   pip install curl_cffi\n\n"
+                "Luego reinicia la aplicación e inténtalo de nuevo.\n"
+                "La app instala esto automáticamente al iniciar si hay internet."
+            )
+        elif "Could not copy" in msg or ("permission" in ml and "cookie" in ml):
             detail = (
                 "⚠️ ERROR DE PERMISOS DE COOKIES:\n\n"
                 "Google Chrome o Edge está ABIERTO y bloquea el archivo de cookies.\n\n"
@@ -1099,12 +1261,16 @@ class YouTubeDownloader(ctk.CTk):
         audio_bitrate = raw_audio_q if raw_audio_q.isdigit() else "192"
 
         plat = self._resolve_platform(url)
+        download_url = url
+
+        if plat == "kick" and self.video_info and self.video_info.get("_stream_url"):
+            download_url = self.video_info["_stream_url"]
 
         # ── Format selection ──────────────────────────────────────────────────
         if audio_only:
             fmt = "bestaudio/best"
-        elif plat == "youtube":
-            # YouTube: honour user-selected resolution
+        elif plat in ("youtube", "kick"):
+            # YouTube & Kick: honour user-selected resolution
             if quality == "Mejor disponible":
                 fmt = "bestvideo+bestaudio/best"
             elif quality.endswith("p") and quality[:-1].isdigit():
@@ -1116,7 +1282,13 @@ class YouTubeDownloader(ctk.CTk):
             # TikTok / Instagram: just grab the best available
             fmt = "bestvideo+bestaudio/best"
 
-        outtmpl = os.path.join(self.download_dir, "%(title)s.%(ext)s")
+        # Sanitize output filename
+        video_title = (self.video_info.get("title") if self.video_info else "%(title)s")
+        if video_title and video_title != "%(title)s":
+            clean_title = re.sub(r'[\\/*?:"<>|]', "", video_title).strip()
+            outtmpl = os.path.join(self.download_dir, f"{clean_title}.%(ext)s")
+        else:
+            outtmpl = os.path.join(self.download_dir, "%(title)s.%(ext)s")
 
         http_headers = {
             "User-Agent": (
@@ -1150,12 +1322,13 @@ class YouTubeDownloader(ctk.CTk):
             }
 
         # Cookie auth (required for Instagram, sometimes TikTok)
-        if self._cookie_file:
-            ydl_opts["cookiefile"] = self._cookie_file
-        else:
-            cookie_opt = self._get_cookie_opt()
-            if cookie_opt:
-                ydl_opts["cookiesfrombrowser"] = cookie_opt
+        if plat != "kick":
+            if self._cookie_file:
+                ydl_opts["cookiefile"] = self._cookie_file
+            else:
+                cookie_opt = self._get_cookie_opt()
+                if cookie_opt:
+                    ydl_opts["cookiesfrombrowser"] = cookie_opt
 
         if audio_only:
             ydl_opts["postprocessors"] = [{
@@ -1166,7 +1339,7 @@ class YouTubeDownloader(ctk.CTk):
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([url])
+                ydl.download([download_url])
             self.after(0, self._on_download_complete)
         except Exception as exc:
             import traceback

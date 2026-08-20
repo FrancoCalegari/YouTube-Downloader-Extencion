@@ -2,3 +2,4 @@ yt-dlp
 customtkinter
 Pillow
 requests
+curl_cffi
