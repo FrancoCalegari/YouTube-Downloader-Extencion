@@ -1038,11 +1038,9 @@ class YouTubeDownloader(ctk.CTk):
                 },
             }
 
-            # YouTube-specific extractor args
-            if plat == "youtube":
-                ydl_opts["extractor_args"] = {
-                    "youtube": {"player_client": ["web", "android"]}
-                }
+            # No extractor_args override: letting yt-dlp use its default player
+            # clients ensures all DASH formats (1080p+) are discovered.
+            # Forcing specific clients (web/android/ios) restricts available formats.
 
             # Cookie auth (required for Instagram, sometimes TikTok)
             if plat != "kick":
@@ -1090,11 +1088,28 @@ class YouTubeDownloader(ctk.CTk):
             # Quality options — all standard resolutions the video can deliver
             # Standard ladder: 144p → 240p → 360p → 480p → 720p → 1080p → 1440p → 2160p
             STANDARD_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160]
-            formats   = info.get("formats", [])
-            available = {
-                f.get("height") for f in formats
-                if f.get("height") and f.get("vcodec") not in (None, "none")
-            }
+            formats = info.get("formats", [])
+
+            def _extract_height(f: dict):
+                """Return height int for a video format, or None."""
+                if f.get("vcodec") in (None, "none"):
+                    return None
+                h = f.get("height")
+                if h:
+                    return int(h)
+                # Fallback: parse format_note like "1080p" or "1080p60"
+                note = f.get("format_note") or ""
+                m = re.match(r"(\d{3,4})p", note)
+                if m:
+                    return int(m.group(1))
+                # Fallback: parse resolution like "1920x1080"
+                res = f.get("resolution") or ""
+                parts = res.split("x")
+                if len(parts) == 2 and parts[1].isdigit():
+                    return int(parts[1])
+                return None
+
+            available = {h for f in formats if (h := _extract_height(f))}
             max_h = max(available) if available else 0
 
             # Include every standard step up to the max available height
@@ -1315,11 +1330,8 @@ class YouTubeDownloader(ctk.CTk):
             "socket_timeout":      30,
         }
 
-        # YouTube-specific extractor args
-        if plat == "youtube":
-            ydl_opts["extractor_args"] = {
-                "youtube": {"player_client": ["web", "android"]}
-            }
+        # No extractor_args override: yt-dlp's default player client selection
+        # gives access to all formats including 1080p+ DASH streams.
 
         # Cookie auth (required for Instagram, sometimes TikTok)
         if plat != "kick":
