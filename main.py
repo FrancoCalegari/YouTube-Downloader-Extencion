@@ -1,6 +1,7 @@
 import math
 import os
 import re
+import shutil
 import sys
 import threading
 import subprocess
@@ -1024,6 +1025,16 @@ class YouTubeDownloader(ctk.CTk):
         try:
             plat = self._resolve_platform(url)
 
+            # Detect available JS runtime (node or deno) for yt-dlp URL decryption.
+            # Required since yt-dlp ~2025+; without it many YouTube videos fail.
+            _node_bin = shutil.which("node")
+            _deno_bin = shutil.which("deno")
+            _js_runtimes = {}
+            if _node_bin:
+                _js_runtimes["node"] = {"path": _node_bin}
+            if _deno_bin:
+                _js_runtimes["deno"] = {"path": _deno_bin}
+
             ydl_opts = {
                 "quiet":         True,
                 "no_warnings":   True,
@@ -1037,6 +1048,8 @@ class YouTubeDownloader(ctk.CTk):
                     "Accept-Language": "en-US,en;q=0.9",
                 },
             }
+            if _js_runtimes:
+                ydl_opts["js_runtimes"] = _js_runtimes
 
             # No extractor_args override: letting yt-dlp use its default player
             # clients ensures all DASH formats (1080p+) are discovered.
@@ -1318,6 +1331,15 @@ class YouTubeDownloader(ctk.CTk):
             ),
         }
 
+        # Detect available JS runtime (node or deno) for yt-dlp URL decryption.
+        _node_bin = shutil.which("node")
+        _deno_bin = shutil.which("deno")
+        _js_runtimes = {}
+        if _node_bin:
+            _js_runtimes["node"] = {"path": _node_bin}
+        if _deno_bin:
+            _js_runtimes["deno"] = {"path": _deno_bin}
+
         ydl_opts = {
             "format":              fmt,
             "outtmpl":             outtmpl,
@@ -1329,6 +1351,8 @@ class YouTubeDownloader(ctk.CTk):
             "nocheckcertificate":  False,
             "socket_timeout":      30,
         }
+        if _js_runtimes:
+            ydl_opts["js_runtimes"] = _js_runtimes
 
         # No extractor_args override: yt-dlp's default player client selection
         # gives access to all formats including 1080p+ DASH streams.
