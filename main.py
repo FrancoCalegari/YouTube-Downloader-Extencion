@@ -1,24 +1,28 @@
 import math
 import os
 import re
-import shutil
+import subprocess
 import sys
 import threading
-import subprocess
 import tkinter as tk
 from io import BytesIO
-from pathlib import Path
 from tkinter import filedialog, messagebox
 
 import customtkinter as ctk
 import requests
-import yt_dlp
 from PIL import Image
 
-try:
-    from curl_cffi import requests as creqs
-except ImportError:
-    creqs = None
+# ── Logica de descarga compartida (GUI + CLI) ─────────────────────────────────
+from core import (
+    SUPPORTED_RE,
+    detect_platform,
+    download_video,
+    fetch_video_info,
+    format_duration,
+    get_available_qualities,
+    get_downloads_dir,
+    resolve_kick_video,
+)
 
 
 # ── Auto-update yt-dlp and curl_cffi in background ───────────────────────────
@@ -37,6 +41,7 @@ def _check_ytdlp_update():
         pass
 
 threading.Thread(target=_check_ytdlp_update, daemon=True).start()
+
 
 # ── Appearance ────────────────────────────────────────────────────────────────
 ctk.set_appearance_mode("Dark")
@@ -60,146 +65,9 @@ GREEN_OK   = "#22c55e"
 YELLOW_W   = "#f59e0b"
 BLUE_INFO  = "#38bdf8"
 
-# ── Multi-platform URL detection ─────────────────────────────────────────────
-SUPPORTED_RE = re.compile(
-    r'^(https?://)?('
-    # YouTube / YouTube Music
-    r'((www|music|m)\.)?youtube\.com/(watch|shorts|embed|v|playlist|browse|channel|user)?'
-    r'|youtu\.be/'
-    # TikTok
-    r'|(www\.)?tiktok\.com/@[\w.]+/video/'
-    r'|vm\.tiktok\.com/'
-    r'|vt\.tiktok\.com/'
-    # Instagram
-    r'|(www\.)?instagram\.com/(reels?|p|tv)/'
-    # Kick
-    r'|(www\.)?kick\.com/[\w.-]+/(videos?/[\w-]+|clip/[\w-]+|[\S]*)'
-    r')[\S]*$',
-    re.IGNORECASE
-)
-
-
-def detect_platform(url: str) -> str:
-    """Return 'youtube', 'tiktok', 'instagram', or 'kick' based on the URL."""
-    u = url.lower()
-    if 'tiktok.com' in u:
-        return 'tiktok'
-    if 'instagram.com' in u:
-        return 'instagram'
-    if 'kick.com' in u:
-        return 'kick'
-    return 'youtube'
-
-
-def resolve_kick_video(url: str) -> dict:
-    """
-    Directly extracts stream master.m3u8, title, thumbnail, duration from Kick
-    bypassing Cloudflare/bot restrictions using curl_cffi.
-    """
-    client = creqs or requests
-    req_kwargs = {"timeout": 15}
-    if creqs:
-        req_kwargs["impersonate"] = "chrome124"
-
-    vod_match = re.search(r'kick\.com/([\w.-]+)/videos?/([\w-]+)', url, re.I)
-    clip_match = re.search(r'kick\.com/(?:[\w.-]+/(?:clips?/|\?clip=)|clip/)([\w-]+)', url, re.I)
-    channel_match = re.search(r'kick\.com/([\w.-]+)/?$', url, re.I)
-
-    if vod_match:
-        channel_slug, video_id = vod_match.group(1), vod_match.group(2)
-        try:
-            api_url = f"https://kick.com/api/v2/channels/{channel_slug}/videos"
-            resp = client.get(api_url, **req_kwargs)
-            if resp.status_code == 200:
-                videos = resp.json()
-                target = None
-                for v in videos:
-                    if video_id in str(v.get('slug', '')) or video_id in str(v.get('id', '')):
-                        target = v
-                        break
-                if not target and len(videos) > 0:
-                    target = videos[0]
-
-                if target and target.get('source'):
-                    thumb = target.get('thumbnail', {})
-                    thumb_url = thumb.get('src') if isinstance(thumb, dict) else str(thumb)
-                    return {
-                        'url': target['source'],
-                        'title': target.get('session_title') or f"Kick VOD - {channel_slug}",
-                        'channel': channel_slug,
-                        'thumbnail': thumb_url,
-                        'duration': (target.get('duration') or 0) / 1000,
-                    }
-        except Exception as e:
-            print(f"Kick VOD API error: {e}")
-
-        # Fallback: scrape page HTML for metadata and m3u8
-        try:
-            page_resp = client.get(url, **req_kwargs)
-            if page_resp.status_code == 200:
-                html = page_resp.text
-                og_title = re.search(r'<meta property="og:title" content="(.*?)"', html)
-                og_desc = re.search(r'<meta property="og:description" content="(.*?)"', html)
-                og_img = re.search(r'<meta property="og:image" content="(.*?)"', html)
-                title = (og_desc.group(1) if og_desc else None) or (og_title.group(1) if og_title else f"Kick VOD - {channel_slug}")
-                m3u8_match = re.search(r'(https://stream\.kick\.com/[^\s"\'<>]+\.m3u8)', html)
-                if m3u8_match:
-                    return {
-                        'url': m3u8_match.group(1),
-                        'title': title,
-                        'channel': channel_slug,
-                        'thumbnail': og_img.group(1) if og_img else None,
-                        'duration': None,
-                    }
-        except Exception as e:
-            print(f"Kick HTML scrape error: {e}")
-
-    elif clip_match:
-        clip_id = clip_match.group(1)
-        try:
-            api_url = f"https://kick.com/api/v2/clips/{clip_id}/play"
-            resp = client.get(api_url, **req_kwargs)
-            if resp.status_code == 200:
-                data = resp.json().get('clip', {})
-                return {
-                    'url': data.get('clip_url'),
-                    'title': data.get('title') or "Kick Clip",
-                    'channel': data.get('channel', {}).get('slug') if isinstance(data.get('channel'), dict) else "Kick",
-                    'thumbnail': data.get('thumbnail_url'),
-                    'duration': data.get('duration'),
-                }
-        except Exception as e:
-            print(f"Kick clip API error: {e}")
-
-    elif channel_match:
-        channel_slug = channel_match.group(1)
-        try:
-            api_url = f"https://kick.com/api/v2/channels/{channel_slug}"
-            resp = client.get(api_url, **req_kwargs)
-            if resp.status_code == 200:
-                data = resp.json()
-                playback_url = data.get('playback_url')
-                if playback_url:
-                    ls = data.get('livestream') or {}
-                    return {
-                        'url': playback_url,
-                        'title': ls.get('session_title') or f"Kick Live - {channel_slug}",
-                        'channel': channel_slug,
-                        'thumbnail': (ls.get('thumbnail') or {}).get('url'),
-                        'duration': None,
-                        'is_live': True
-                    }
-        except Exception as e:
-            print(f"Kick live API error: {e}")
-
-    return None
-
-
-def get_downloads_dir() -> str:
-    """Returns a reliable downloads folder regardless of run location."""
-    base = Path.home() / "Downloads" / "YT-Downloader"
-    base.mkdir(parents=True, exist_ok=True)
-    return str(base)
+# ── Multi-platform URL detection (importado desde core.py) ───────────────────
+# SUPPORTED_RE, detect_platform, resolve_kick_video, get_downloads_dir
+# y toda la logica de descarga viven en core.py.
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -939,6 +807,18 @@ class YouTubeDownloader(ctk.CTk):
         browser = mapping.get(self._cookie_browser)
         return (browser,) if browser else None
 
+    def _get_cookie_browser_name(self):
+        """Return lowercase browser name string for core.py helpers, or None."""
+        mapping = {
+            "CHROME":  "chrome",
+            "FIREFOX": "firefox",
+            "EDGE":    "edge",
+            "BRAVE":   "brave",
+            "OPERA":   "opera",
+        }
+        return mapping.get(self._cookie_browser)
+
+
     def _on_platform_change(self, value: str):
         """Called when the platform segmented button changes."""
         self._platform = value.lower()
@@ -973,14 +853,7 @@ class YouTubeDownloader(ctk.CTk):
             self.quality_menu.configure(state=state, text_color=OFF_WHITE if enabled else "#444444")
         self.audio_quality_menu.configure(state=state)
 
-    @staticmethod
-    def _format_duration(seconds) -> str:
-        if not seconds:
-            return ""
-        seconds = int(seconds)
-        h, rem = divmod(seconds, 3600)
-        m, s   = divmod(rem, 60)
-        return f"{h}:{m:02d}:{s:02d}" if h else f"{m}:{s:02d}"
+
 
     # ── Load video info ───────────────────────────────────────────────────────
     def load_video_info(self):
@@ -1024,68 +897,19 @@ class YouTubeDownloader(ctk.CTk):
     def _fetch_info(self, url: str):
         try:
             plat = self._resolve_platform(url)
+            cookie_browser = self._get_cookie_browser_name()
 
-            # Detect available JS runtime (node or deno) for yt-dlp URL decryption.
-            # Required since yt-dlp ~2025+; without it many YouTube videos fail.
-            _node_bin = shutil.which("node")
-            _deno_bin = shutil.which("deno")
-            _js_runtimes = {}
-            if _node_bin:
-                _js_runtimes["node"] = {"path": _node_bin}
-            if _deno_bin:
-                _js_runtimes["deno"] = {"path": _deno_bin}
-
-            ydl_opts = {
-                "quiet":         True,
-                "no_warnings":   True,
-                "skip_download": True,
-                "http_headers": {
-                    "User-Agent": (
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                        "AppleWebKit/537.36 (KHTML, like Gecko) "
-                        "Chrome/125.0.0.0 Safari/537.36"
-                    ),
-                    "Accept-Language": "en-US,en;q=0.9",
-                },
-            }
-            if _js_runtimes:
-                ydl_opts["js_runtimes"] = _js_runtimes
-
-            # No extractor_args override: letting yt-dlp use its default player
-            # clients ensures all DASH formats (1080p+) are discovered.
-            # Forcing specific clients (web/android/ios) restricts available formats.
-
-            # Cookie auth (required for Instagram, sometimes TikTok)
-            if plat != "kick":
-                if self._cookie_file:
-                    ydl_opts["cookiefile"] = self._cookie_file
-                else:
-                    cookie_opt = self._get_cookie_opt()
-                    if cookie_opt:
-                        ydl_opts["cookiesfrombrowser"] = cookie_opt
-
-            if plat == "kick":
-                kick_data = resolve_kick_video(url)
-                if not kick_data or not kick_data.get("url"):
-                    raise Exception("No se pudo obtener el stream de Kick. Verifica que el video o canal sea público.")
-
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(kick_data["url"], download=False)
-
-                info["title"] = kick_data.get("title") or info.get("title") or "Kick Video"
-                info["channel"] = kick_data.get("channel") or info.get("uploader") or ""
-                if kick_data.get("thumbnail"):
-                    info["thumbnail"] = kick_data["thumbnail"]
-                if kick_data.get("duration"):
-                    info["duration"] = kick_data["duration"]
-                info["_stream_url"] = kick_data["url"]
-            else:
-                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                    info = ydl.extract_info(url, download=False)
+            # Delegate all extraction logic to core.py
+            info = fetch_video_info(
+                url,
+                platform=plat,
+                cookie_browser=cookie_browser,
+                cookie_file=self._cookie_file or None,
+            )
 
             self.video_info = info
 
-            # Thumbnail
+            # Thumbnail (GUI-specific: load as CTkImage)
             ctk_img   = None
             thumb_url = info.get("thumbnail") or ""
             if thumb_url:
@@ -1098,45 +922,10 @@ class YouTubeDownloader(ctk.CTk):
                 except Exception as te:
                     print(f"Thumbnail error: {te}")
 
-            # Quality options — all standard resolutions the video can deliver
-            # Standard ladder: 144p → 240p → 360p → 480p → 720p → 1080p → 1440p → 2160p
-            STANDARD_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160]
-            formats = info.get("formats", [])
-
-            def _extract_height(f: dict):
-                """Return height int for a video format, or None."""
-                if f.get("vcodec") in (None, "none"):
-                    return None
-                h = f.get("height")
-                if h:
-                    return int(h)
-                # Fallback: parse format_note like "1080p" or "1080p60"
-                note = f.get("format_note") or ""
-                m = re.match(r"(\d{3,4})p", note)
-                if m:
-                    return int(m.group(1))
-                # Fallback: parse resolution like "1920x1080"
-                res = f.get("resolution") or ""
-                parts = res.split("x")
-                if len(parts) == 2 and parts[1].isdigit():
-                    return int(parts[1])
-                return None
-
-            available = {h for f in formats if (h := _extract_height(f))}
-            max_h = max(available) if available else 0
-
-            # Include every standard step up to the max available height
-            filtered = [h for h in STANDARD_HEIGHTS if h <= max_h]
-            # Also include any non-standard height reported by yt-dlp
-            extra = sorted(available - set(STANDARD_HEIGHTS))
-            all_heights = sorted(set(filtered) | set(extra))
-
-            q_opts = [f"{h}p" for h in all_heights]
-            # Always offer a "best available" option at the end
-            q_opts.append("Mejor disponible")
-
+            # Quality options via core helper
+            q_opts   = get_available_qualities(info)
             channel  = info.get("channel") or info.get("uploader") or ""
-            duration = self._format_duration(info.get("duration"))
+            duration = format_duration(info.get("duration"))
 
             self.after(0, lambda: self._show_info(
                 info["title"], ctk_img, q_opts, channel, duration))
@@ -1145,6 +934,7 @@ class YouTubeDownloader(ctk.CTk):
             import traceback
             traceback.print_exc()
             self.after(0, lambda e=exc: self._on_fetch_error(str(e)))
+
 
     def _show_info(self, title: str, ctk_img, q_opts: list,
                    channel: str, duration: str):
@@ -1284,103 +1074,30 @@ class YouTubeDownloader(ctk.CTk):
                 text="PROCESANDO ARCHIVO FINAL..."))
 
     def _download_thread(self, url: str, quality: str, audio_only: bool):
-        # Parse selected audio bitrate (e.g. "192k  —  ESTÁNDAR" → "192")
-        raw_audio_q = self.audio_quality_var.get().split("k")[0].strip()
+        # Parse selected audio bitrate (e.g. "192k  —  ESTANDAR" -> "192")
+        raw_audio_q   = self.audio_quality_var.get().split("k")[0].strip()
         audio_bitrate = raw_audio_q if raw_audio_q.isdigit() else "192"
-
-        plat = self._resolve_platform(url)
-        download_url = url
-
-        if plat == "kick" and self.video_info and self.video_info.get("_stream_url"):
-            download_url = self.video_info["_stream_url"]
-
-        # ── Format selection ──────────────────────────────────────────────────
-        if audio_only:
-            fmt = "bestaudio/best"
-        elif plat in ("youtube", "kick"):
-            # YouTube & Kick: honour user-selected resolution
-            if quality == "Mejor disponible":
-                fmt = "bestvideo+bestaudio/best"
-            elif quality.endswith("p") and quality[:-1].isdigit():
-                h   = quality[:-1]
-                fmt = f"bestvideo[height<={h}]+bestaudio/best[height<={h}]/best[height<={h}]"
-            else:
-                fmt = "bestvideo+bestaudio/best"
-        else:
-            # TikTok / Instagram: just grab the best available
-            fmt = "bestvideo+bestaudio/best"
-
-        # Sanitize output filename
-        video_title = (self.video_info.get("title") if self.video_info else "%(title)s")
-        if video_title and video_title != "%(title)s":
-            clean_title = re.sub(r'[\\/*?:"<>|]', "", video_title).strip()
-            outtmpl = os.path.join(self.download_dir, f"{clean_title}.%(ext)s")
-        else:
-            outtmpl = os.path.join(self.download_dir, "%(title)s.%(ext)s")
-
-        http_headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/125.0.0.0 Safari/537.36"
-            ),
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept": (
-                "text/html,application/xhtml+xml,application/xml;"
-                "q=0.9,*/*;q=0.8"
-            ),
-        }
-
-        # Detect available JS runtime (node or deno) for yt-dlp URL decryption.
-        _node_bin = shutil.which("node")
-        _deno_bin = shutil.which("deno")
-        _js_runtimes = {}
-        if _node_bin:
-            _js_runtimes["node"] = {"path": _node_bin}
-        if _deno_bin:
-            _js_runtimes["deno"] = {"path": _deno_bin}
-
-        ydl_opts = {
-            "format":              fmt,
-            "outtmpl":             outtmpl,
-            "progress_hooks":      [self._progress_hook],
-            "merge_output_format": "mp4",
-            "quiet":               True,
-            "no_warnings":         True,
-            "http_headers":        http_headers,
-            "nocheckcertificate":  False,
-            "socket_timeout":      30,
-        }
-        if _js_runtimes:
-            ydl_opts["js_runtimes"] = _js_runtimes
-
-        # No extractor_args override: yt-dlp's default player client selection
-        # gives access to all formats including 1080p+ DASH streams.
-
-        # Cookie auth (required for Instagram, sometimes TikTok)
-        if plat != "kick":
-            if self._cookie_file:
-                ydl_opts["cookiefile"] = self._cookie_file
-            else:
-                cookie_opt = self._get_cookie_opt()
-                if cookie_opt:
-                    ydl_opts["cookiesfrombrowser"] = cookie_opt
-
-        if audio_only:
-            ydl_opts["postprocessors"] = [{
-                "key":              "FFmpegExtractAudio",
-                "preferredcodec":   "mp3",
-                "preferredquality": audio_bitrate,
-            }]
+        plat          = self._resolve_platform(url)
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                ydl.download([download_url])
+            download_video(
+                url,
+                platform=plat,
+                quality=quality,
+                audio_only=audio_only,
+                audio_bitrate=audio_bitrate,
+                download_dir=self.download_dir,
+                cookie_browser=self._get_cookie_browser_name(),
+                cookie_file=self._cookie_file or None,
+                progress_hook=self._progress_hook,
+                video_info=self.video_info,
+            )
             self.after(0, self._on_download_complete)
         except Exception as exc:
             import traceback
             traceback.print_exc()
             self.after(0, lambda e=exc: self._on_download_error(str(e)))
+
 
     def _on_download_complete(self):
         self._is_downloading = False
