@@ -13,13 +13,11 @@ ENV/
 
 # Distribution / packaging
 build/
-dist/
 *.egg-info/
 *.egg
 MANIFEST
 
 # PyInstaller
-*.spec
 # Uncomment to keep main.spec tracked:
 # !main.spec
 
