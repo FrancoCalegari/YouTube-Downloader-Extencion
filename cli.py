@@ -185,7 +185,9 @@ def main():
 
     parser.add_argument(
         "url",
-        help="URL del video a descargar.",
+        nargs="?",
+        default=None,
+        help="URL del video a descargar (opcional para modo interactivo).",
     )
     parser.add_argument(
         "-a", "--audio",
@@ -261,6 +263,46 @@ def main():
     # ── Inicio ────────────────────────────────────────────────────────────────
     _print_banner()
 
+    if not args.url:
+        print(bold("── MODO INTERACTIVO ──────────────────────────────────────────────"))
+        url = ""
+        while not url:
+            url = input(f"  {cyan('URL del video (o "24" para salir): ')}").strip()
+            if url == "24":
+                print(dim("  Saliendo..."))
+                sys.exit(0)
+        args.url = url
+        
+        print()
+        print(f"  {bold('Formato:')}")
+        print(f"    {cyan('1.')} Video (MP4)")
+        print(f"    {cyan('2.')} Solo Audio (MP3)")
+        mode = ""
+        while mode not in ["1", "2"]:
+            mode = input(f"  {cyan('Selecciona (1/2): ')}").strip()
+        args.audio_only = (mode == "2")
+        
+        if args.audio_only:
+            print()
+            print(f"  {bold('Calidad de Audio (kbps):')}")
+            print(f"    {cyan('1.')} 128")
+            print(f"    {cyan('2.')} 192 (Recomendado)")
+            print(f"    {cyan('3.')} 256")
+            print(f"    {cyan('4.')} 320")
+            q = input(f"  {cyan('Selecciona (1-4) [2]: ')}").strip()
+            args.audio_quality = {"1": "128", "2": "192", "3": "256", "4": "320"}.get(q, "192")
+        else:
+            print()
+            print(f"  {bold('Calidad de Video:')}")
+            print(f"    {cyan('1.')} Mejor disponible (Recomendado)")
+            print(f"    {cyan('2.')} 1080p")
+            print(f"    {cyan('3.')} 720p")
+            print(f"    {cyan('4.')} Elegir despues de analizar")
+            q = input(f"  {cyan('Selecciona (1-4) [1]: ')}").strip()
+            args.resolution = {"1": "Mejor disponible", "2": "1080p", "3": "720p", "4": "ask"}.get(q, "Mejor disponible")
+        
+        print()
+
     url      = args.url.strip()
     platform = args.platform
 
@@ -305,6 +347,19 @@ def main():
 
     qualities = get_available_qualities(info)
     _print_info(info, qualities)
+
+    if args.resolution == "ask":
+        _print_separator()
+        print(f"  {bold('Calidades disponibles:')}")
+        for i, q in enumerate(qualities, 1):
+            marker = green(" <-- recomendada") if q == qualities[-2] and len(qualities) > 1 else ""
+            print(f"    {cyan(f'{i}.')} {q}{marker}")
+        
+        sel = ""
+        while not sel.isdigit() or not (1 <= int(sel) <= len(qualities)):
+            sel = input(f"  {cyan(f'Selecciona (1-{len(qualities)}): ')}").strip()
+        args.resolution = qualities[int(sel)-1]
+        print()
 
     # ── Modo info-only / list-qualities ───────────────────────────────────────
     if args.info_only or args.list_qualities:
