@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YouTube Downloader & Converter Pro</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Header -->
+    <header class="app-header">
+      <div class="logo-group">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" width="20" height="20">
+            <path fill="#ffffff" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <h1>YT Downloader</h1>
+          <span class="pro-badge">PRO</span>
+        </div>
+      </div>
+
+      <div class="status-indicator" id="statusPill" title="Estado de la conexión con el backend Node">
+        <span class="status-dot"></span>
+        <span class="status-label" id="statusLabel">Conectando...</span>
+      </div>
+    </header>
+
+    <!-- Offline Warning Card (Hidden when connected) -->
+    <div class="offline-card" id="offlineCard" style="display: none;">
+      <div class="offline-icon">⚠️</div>
+      <div class="offline-info">
+        <h3>Servidor Node desconectado (Puerto 23458)</h3>
+        <p>Inicia el servicio del sistema o ejecuta en terminal:</p>
+        <div class="command-box">
+          <code>npm start</code>
+          <button id="copyCmdBtn" title="Copiar comando">📋</button>
+        </div>
+      </div>
+      <button class="btn-retry" id="btnRetryConnection">Reintentar</button>
+    </div>
+
+    <!-- URL Input Bar -->
+    <div class="url-bar-container">
+      <div class="url-input-wrapper">
+        <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16">
+          <path fill="currentColor" d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/>
+        </svg>
+        <input type="text" id="videoUrlInput" placeholder="Pega el enlace de YouTube o Shorts..." spellcheck="false" autocomplete="off">
+        <button class="clear-btn" id="clearUrlBtn" style="display: none;">✕</button>
+      </div>
+      <button class="fetch-btn" id="fetchInfoBtn" title="Cargar información">
+        <span>Cargar</span>
+      </button>
+    </div>
+
+    <!-- Loading Skeleton / Spinner for Info -->
+    <div class="info-loader" id="infoLoader" style="display: none;">
+      <div class="spinner"></div>
+      <span>Analizando video y formatos disponibles...</span>
+    </div>
+
+    <!-- Video Preview Card -->
+    <div class="video-preview-card" id="videoPreviewCard" style="display: none;">
+      <div class="thumb-container">
+        <img id="videoThumb" src="" alt="Thumbnail">
+        <span class="duration-badge" id="videoDuration">0:00</span>
+      </div>
+      <div class="video-details">
+        <h2 class="video-title" id="videoTitle" title="">Cargando video...</h2>
+        <p class="video-channel" id="videoChannel">Canal</p>
+      </div>
+    </div>
+
+    <!-- Mode Selector Tabs (Video vs Audio) -->
+    <div class="type-segmented-tabs" id="typeTabs">
+      <button class="type-tab active" data-type="video" id="tabVideo">
+        <svg viewBox="0 0 24 24" width="16" height="16">
+          <path fill="currentColor" d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"/>
+        </svg>
+        <span>Video (MP4)</span>
+      </button>
+      <button class="type-tab" data-type="audio" id="tabAudio">
+        <svg viewBox="0 0 24 24" width="16" height="16">
+          <path fill="currentColor" d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z"/>
+        </svg>
+        <span>Audio (MP3 / WAV)</span>
+      </button>
+    </div>
+
+    <!-- Options Pane: Video -->
+    <div class="options-pane" id="paneVideo">
+      <div class="field-row">
+        <div class="field-group">
+          <label for="videoQualitySelect">Calidad / Resolución</label>
+          <div class="select-wrapper">
+            <select id="videoQualitySelect">
+              <option value="best">Mejor disponible (Auto)</option>
+              <option value="2160p">2160p (4K UHD)</option>
+              <option value="1440p">1440p (2K QHD)</option>
+              <option value="1080p">1080p (Full HD)</option>
+              <option value="720p">720p (HD)</option>
+              <option value="480p">480p (SD)</option>
+              <option value="360p">360p (Baja)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="videoFormatSelect">Formato</label>
+          <div class="select-wrapper">
+            <select id="videoFormatSelect">
+              <option value="mp4">MP4 (Recomendado)</option>
+              <option value="mkv">MKV (Alta calidad)</option>
+              <option value="webm">WEBM</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Options Pane: Audio -->
+    <div class="options-pane" id="paneAudio" style="display: none;">
+      <div class="field-row">
+        <div class="field-group">
+          <label for="audioFormatSelect">Formato de Conversión</label>
+          <div class="select-wrapper">
+            <select id="audioFormatSelect">
+              <option value="mp3">MP3 (Universal, más compatible)</option>
+              <option value="m4a">M4A (Excelente compresión AAC)</option>
+              <option value="wav">WAV (Audio sin pérdida)</option>
+              <option value="flac">FLAC (Lossless / Hi-Fi)</option>
+              <option value="opus">OPUS (Máxima eficiencia)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-group">
+          <label for="audioBitrateSelect">Calidad / Bitrate</label>
+          <div class="select-wrapper">
+            <select id="audioBitrateSelect">
+              <option value="320k">320 kbps (Máxima fidelidad)</option>
+              <option value="256k">256 kbps (Muy alta)</option>
+              <option value="192k" selected>192 kbps (Recomendada)</option>
+              <option value="128k">128 kbps (Ligero / Voz)</option>
+              <option value="64k">64 kbps (Bajo peso)</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Action Section -->
+    <div class="action-section">
+      <button class="btn-primary-download" id="startDownloadBtn">
+        <div class="btn-glow"></div>
+        <div class="btn-content">
+          <svg class="dl-icon" viewBox="0 0 24 24" width="20" height="20">
+            <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+          </svg>
+          <span id="downloadBtnText">Iniciar Descarga</span>
+        </div>
+      </button>
+    </div>
+
+    <!-- Active Download Progress Card (Real-time SSE) -->
+    <div class="progress-card" id="progressCard" style="display: none;">
+      <div class="progress-header">
+        <div class="progress-stage-info">
+          <div class="stage-pulse"></div>
+          <span class="stage-text" id="progressStage">Preparando descarga...</span>
+        </div>
+        <span class="progress-pct" id="progressPct">0%</span>
+      </div>
+
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill" style="width: 0%;">
+          <div class="shimmer"></div>
+        </div>
+      </div>
+
+      <div class="progress-metrics">
+        <span class="metric-item">
+          <span class="metric-label">Velocidad:</span>
+          <strong id="metricSpeed">--</strong>
+        </span>
+        <span class="metric-item">
+          <span class="metric-label">Tiempo restante:</span>
+          <strong id="metricEta">--</strong>
+        </span>
+      </div>
+
+      <div class="progress-actions">
+        <button class="btn-cancel" id="cancelJobBtn">Cancelar</button>
+      </div>
+    </div>
+
+    <!-- Completed Download Result Card -->
+    <div class="completed-card" id="completedCard" style="display: none;">
+      <div class="completed-icon-wrapper">
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <path fill="#10B981" d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+        </svg>
+      </div>
+      <div class="completed-info">
+        <h4>¡Proceso Finalizado con Éxito!</h4>
+        <p id="completedFileName">video.mp4</p>
+      </div>
+      <div class="completed-actions">
+        <button class="btn-save-file" id="btnSaveFile">
+          <svg viewBox="0 0 24 24" width="16" height="16">
+            <path fill="currentColor" d="M19.35 10.04C18.67 6.59 15.64 4 12 4 9.11 4 6.6 5.64 5.35 8.04 2.34 8.36 0 10.91 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96zM17 13l-5 5-5-5h3V9h4v4h3z"/>
+          </svg>
+          <span>Guardar en PC</span>
+        </button>
+        <button class="btn-new-download" id="btnNewDownload">Otra descarga</button>
+      </div>
+    </div>
+
+    <!-- Footer con Historial de Descargas -->
+    <footer class="app-footer">
+      <button class="history-toggle-btn" id="toggleHistoryBtn">
+        <div class="toggle-label">
+          <svg viewBox="0 0 24 24" width="15" height="15">
+            <path fill="currentColor" d="M13 3a9 9 0 0 0-9 9H1l3.89 3.89.07.14L9 12H6c0-3.87 3.13-7 7-7s7 3.13 7 7-3.13 7-7 7c-1.93 0-3.68-.79-4.94-2.06l-1.42 1.42A8.954 8.954 0 0 0 13 21a9 9 0 0 0 0-18zm-1 5v5l4.28 2.54.72-1.21-3.5-2.08V8H12z"/>
+          </svg>
+          <span>Historial de Descargas</span>
+        </div>
+        <span class="arrow-icon" id="historyArrow">▼</span>
+      </button>
+
+      <!-- History List -->
+      <div class="history-list" id="historyList" style="display: none;">
+        <div class="history-empty" id="historyEmpty">No hay descargas recientes en esta sesión.</div>
+        <div class="history-items" id="historyItems"></div>
+      </div>
+    </footer>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

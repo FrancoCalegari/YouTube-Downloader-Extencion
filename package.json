@@ -1,13 +1,15 @@
 {
-"name": "youtube-downloader",
-"version": "1.0.0",
-"description": "Descargador de videos de YouTube",
-"main": "server.js",
-"scripts": {
-"start": "node server.js"
-},
-"dependencies": {
-"express": "^4.18.2",
-"ytdl-core": "^4.11.5"
-}
+  "name": "youtube-downloader-backend",
+  "version": "1.0.0",
+  "description": "Backend Node.js para extensión de Chrome de descarga y conversión de YouTube",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.0.0"
+  }
 }

@@ -1,0 +1,49 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Downloader & Converter Pro",
+  "version": "1.0.0",
+  "description": "Descarga y convierte videos y audios de YouTube (MP4, MP3, WAV, 4K, 1080p, 320kbps) con estado en tiempo real.",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Descargar Video o Audio de YouTube",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png",
+      "128": "icons/icon-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://youtube.com/*"
+      ],
+      "js": ["content/content.js"],
+      "css": ["content/content.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "permissions": [
+    "activeTab",
+    "tabs",
+    "storage",
+    "downloads",
+    "notifications"
+  ],
+  "host_permissions": [
+    "http://localhost:23458/*",
+    "http://127.0.0.1:23458/*",
+    "https://*.youtube.com/*",
+    "https://*.youtu.be/*"
+  ]
+}

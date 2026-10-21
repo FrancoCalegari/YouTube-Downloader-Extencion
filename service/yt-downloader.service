@@ -1,0 +1,18 @@
+[Unit]
+Description=YouTube Downloader & Converter Backend Service (Port 23458)
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/gowther/Documentos/proyectos/YouTube-Downloader-Extencion
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=3
+Environment=NODE_ENV=production
+Environment=PORT=23458
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=default.target
