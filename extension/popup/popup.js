@@ -100,7 +100,9 @@ async function detectActiveTab() {
     if (tab && tab.url) {
       const url = tab.url;
       const isYouTube = /(?:youtube\.com\/(?:watch|shorts|embed)|youtu\.be\/)/i.test(url);
-      if (isYouTube) {
+      const isInstagram = /(?:instagram\.com\/(?:p|reel|reels)\/)/i.test(url);
+      const isFacebook = /(?:facebook\.com\/(?:watch|reel|reels|share|.*videos?|video\.php)|fb\.watch\/)/i.test(url);
+      if (isYouTube || isInstagram || isFacebook) {
         currentTabUrl = url;
         videoUrlInput.value = url;
         clearUrlBtn.style.display = 'block';
@@ -198,7 +200,7 @@ function updateDownloadButtonText() {
 async function handleStartDownload() {
   const url = videoUrlInput.value.trim();
   if (!url) {
-    alert('Por favor, ingresa una URL de YouTube válida.');
+    alert('Por favor, ingresa una URL válida de YouTube, Instagram o Facebook.');
     videoUrlInput.focus();
     return;
   }

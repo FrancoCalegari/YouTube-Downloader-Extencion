@@ -348,7 +348,7 @@ class YouTubeDownloader(ctk.CTk):
         self.download_dir    = get_downloads_dir()
         self._is_downloading = False
         self._open_btn_shown = False
-        self._platform       = "auto"   # 'auto' | 'youtube' | 'tiktok' | 'instagram'
+        self._platform       = "auto"   # 'auto' | 'youtube' | 'tiktok' | 'instagram' | 'facebook' | 'kick'
         self._cookie_browser = "NINGUNO" # browser to pull cookies from
         self._cookie_file    = ""        # optional path to cookies.txt
 
@@ -425,7 +425,7 @@ class YouTubeDownloader(ctk.CTk):
         self._platform_var = ctk.StringVar(value="AUTO")
         self._platform_seg = ctk.CTkSegmentedButton(
             plat_row,
-            values=["AUTO", "YOUTUBE", "TIKTOK", "INSTAGRAM", "KICK"],
+            values=["AUTO", "YOUTUBE", "TIKTOK", "INSTAGRAM", "FACEBOOK", "KICK"],
             variable=self._platform_var,
             command=self._on_platform_change,
             height=32,
@@ -464,7 +464,7 @@ class YouTubeDownloader(ctk.CTk):
         )
         self.load_btn.grid(row=0, column=1)
 
-        body_label(url_card, "  Admite: YouTube  ·  YouTube Music  ·  TikTok  ·  Instagram Reels  ·  Kick").grid(
+        body_label(url_card, "  Admite: YouTube  ·  YouTube Music  ·  TikTok  ·  Instagram  ·  Facebook  ·  Kick").grid(
             row=4, column=0, padx=14, pady=(0, 4), sticky="w")
 
         # ── Cookie auth row (Instagram / TikTok) ────────────────────────────────
@@ -495,7 +495,7 @@ class YouTubeDownloader(ctk.CTk):
 
         self._cookie_hint = body_label(
             cookie_row,
-            "  ℹ️  Requerido para Instagram (Cierra Chrome si está abierto)",
+            "  ℹ️  Requerido para Instagram/Facebook privado (Cierra Chrome si está abierto)",
         )
         self._cookie_hint.grid(row=0, column=2, padx=(10, 0), sticky="w")
 
@@ -822,15 +822,17 @@ class YouTubeDownloader(ctk.CTk):
     def _on_platform_change(self, value: str):
         """Called when the platform segmented button changes."""
         self._platform = value.lower()
-        # Quality menu enabled for YouTube and Kick (both support multiple resolutions)
-        is_multi = self._platform in ("auto", "youtube", "kick")
+        # Quality menu enabled for YouTube, Kick and Facebook
+        is_multi = self._platform in ("auto", "youtube", "kick", "facebook")
         self.quality_menu.configure(
             state="normal" if is_multi else "disabled",
             text_color=OFF_WHITE if is_multi else "#444444",
         )
-        # Kick hint: no auth needed
+        # Platform specific cookie hints
         if self._platform == "kick":
             self._cookie_hint.configure(text="  🟢  Kick no requiere cookies")
+        elif self._platform == "facebook":
+            self._cookie_hint.configure(text="  ℹ️  Usa cookies si el video de Facebook es de grupo o privado")
         else:
             self._cookie_hint.configure(text="  ℹ️  Requerido para Instagram (Cierra Chrome si está abierto)")
 
@@ -847,7 +849,7 @@ class YouTubeDownloader(ctk.CTk):
         self.load_btn.configure(state=state)
         url = self.url_entry.get().strip()
         plat = self._resolve_platform(url)
-        if enabled and plat not in ("youtube", "kick"):
+        if enabled and plat not in ("youtube", "kick", "facebook"):
             self.quality_menu.configure(state="disabled", text_color="#444444")
         else:
             self.quality_menu.configure(state=state, text_color=OFF_WHITE if enabled else "#444444")
@@ -875,6 +877,9 @@ class YouTubeDownloader(ctk.CTk):
                 "  · https://www.tiktok.com/@user/video/...\n"
                 "  · https://vm.tiktok.com/...\n"
                 "  · https://www.instagram.com/reel/...\n"
+                "  · https://www.facebook.com/watch/?v=...\n"
+                "  · https://www.facebook.com/reel/...\n"
+                "  · https://fb.watch/...\n"
                 "  · https://kick.com/user/videos/VIDEO-ID\n"
                 "  · https://kick.com/user/clip/CLIP-ID"
             )
@@ -882,7 +887,7 @@ class YouTubeDownloader(ctk.CTk):
 
         # Update quality menu state based on platform
         plat = self._resolve_platform(url)
-        is_multi = plat in ("youtube", "kick")
+        is_multi = plat in ("youtube", "kick", "facebook")
         self.quality_menu.configure(
             state="normal" if is_multi else "disabled",
             text_color=OFF_WHITE if is_multi else "#444444",
@@ -1001,6 +1006,15 @@ class YouTubeDownloader(ctk.CTk):
                 " 2. El Reel es privado o requiere inicio de sesión.\n\n"
                 "Si el Reel es público, selecciona tu navegador en\n"
                 "'// Cookies del nav' y reintenta."
+            )
+        elif ("login" in ml and "facebook" in ml) or "permission to view" in ml:
+            detail = (
+                "⚠️ FACEBOOK REQUIERE AUTENTICACIÓN:\n\n"
+                "Facebook bloqueó el acceso al video. Posibles causas:\n\n"
+                " 1. El video pertenece a un grupo privado o tiene restricciones de privacidad.\n"
+                " 2. Meta requiere inicio de sesión para visualizar este contenido.\n\n"
+                "Solución:\n"
+                " Selecciona tu navegador (Chrome / Edge / Firefox) en '// Cookies del nav' y reintenta."
             )
         else:
             detail = (

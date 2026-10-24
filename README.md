@@ -1,6 +1,6 @@
 # Multi Downloader — GaboDev
 
-> Descarga videos y audio de YouTube, TikTok, Instagram y Kick.  
+> Descarga videos y audio de YouTube, TikTok, Instagram, Facebook y Kick.  
 > Disponible como **interfaz gráfica** (`main.py`) o **línea de comandos** (`cli.py`).  
 > Powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp) · Desarrollado con Python + CustomTkinter
 
@@ -12,7 +12,7 @@
 |---|---|
 | 📥 Descarga de video | MP4 en la calidad que elijas (hasta 4K según disponibilidad) |
 | 🎵 Descarga de audio | Extrae el audio en MP3 con bitrate configurable (64k – 320k) |
-| 🌐 Multi-plataforma | YouTube, YouTube Music, TikTok, Instagram Reels, Kick VODs/clips/live |
+| 🌐 Multi-plataforma | YouTube, YouTube Music, TikTok, Instagram Reels, Facebook Watch/Reels, Kick |
 | 🔍 Vista previa | Muestra miniatura, título, canal y duración antes de descargar |
 | 📊 Progreso en tiempo real | Barra con velocidad y tiempo restante (GUI y terminal) |
 | 📁 Carpeta personalizable | Elige dónde guardar los archivos |
@@ -72,7 +72,7 @@ python cli.py https://... -p kick
 | `-r`, `--resolution` | Calidad: `1080p`, `720p`, `480p`… | Mejor disponible |
 | `-q`, `--audio-quality` | Bitrate MP3: `128`, `192`, `256`, `320` | `192` |
 | `-o`, `--output` | Directorio de destino | `~/Downloads/YT-Downloader` |
-| `-p`, `--platform` | `auto`, `youtube`, `tiktok`, `instagram`, `kick` | `auto` |
+| `-p`, `--platform` | `auto`, `youtube`, `tiktok`, `instagram`, `facebook`, `kick` | `auto` |
 | `-b`, `--cookie-browser` | `chrome`, `firefox`, `edge`, `brave`, `opera` | ninguno |
 | `-c`, `--cookie-file` | Ruta a archivo `cookies.txt` | ninguno |
 | `--list-qualities` | Listar calidades disponibles y salir | — |
@@ -87,6 +87,7 @@ python cli.py https://... -p kick
 | YouTube | `youtube.com/watch`, `youtu.be`, `youtube.com/shorts`, `music.youtube.com` |
 | TikTok | `tiktok.com/@user/video/...`, `vm.tiktok.com/...` |
 | Instagram | `instagram.com/reel/...`, `instagram.com/p/...` |
+| Facebook | `facebook.com/watch`, `facebook.com/reel`, `fb.watch`, `facebook.com/.../videos` |
 | Kick | VODs, clips y streams en vivo |
 
 ---

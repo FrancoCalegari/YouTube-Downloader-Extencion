@@ -129,20 +129,36 @@ function formatDuration(seconds) {
   return `${mins}:${remSec.toString().padStart(2, '0')}`;
 }
 
-function isValidVideoUrl(rawUrl) {
+function isYouTubeUrl(rawUrl) {
   if (!rawUrl || typeof rawUrl !== 'string') return false;
-  const youtubePattern = /^(https?:\/\/)?((www|music|m)\.)?(youtube\.com\/(watch\?|shorts\/|embed\/)|youtu\.be\/)/i;
-  return youtubePattern.test(rawUrl.trim());
+  return /^(https?:\/\/)?((www|music|m)\.)?(youtube\.com\/(watch\?|shorts\/|embed\/)|youtu\.be\/)/i.test(rawUrl.trim());
+}
+
+function isInstagramUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return false;
+  return /^(https?:\/\/)?((www)\.)?(instagram\.com\/(p|reel|reels|stories)\/|instagr\.am\/)/i.test(rawUrl.trim());
+}
+
+function isFacebookUrl(rawUrl) {
+  if (!rawUrl || typeof rawUrl !== 'string') return false;
+  return /^(https?:\/\/)?((www|m|web)\.)?(facebook\.com\/(watch|reel|reels|share|.*videos?|video\.php)|fb\.watch\/)/i.test(rawUrl.trim());
+}
+
+function isValidVideoUrl(rawUrl) {
+  return isYouTubeUrl(rawUrl) || isInstagramUrl(rawUrl) || isFacebookUrl(rawUrl);
 }
 
 // Build standard yt-dlp arguments with anti-403 configuration
-function buildBaseYtdlpArgs() {
+function buildBaseYtdlpArgs(targetUrl = '') {
   const args = [
     '--js-runtimes', 'node',
     '--no-warnings',
-    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
-    '--extractor-args', `youtube:player_client=${PLAYER_CLIENTS}`
+    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36'
   ];
+
+  if (isYouTubeUrl(targetUrl)) {
+    args.push('--extractor-args', `youtube:player_client=${PLAYER_CLIENTS}`);
+  }
 
   if (COOKIE_FILE && fs.existsSync(COOKIE_FILE)) {
     args.push('--cookies', COOKIE_FILE);
@@ -296,7 +312,7 @@ app.get('/api/info', async (req, res) => {
   }
 
   if (!isValidVideoUrl(videoUrl)) {
-    return res.status(400).json({ error: 'URL no válida. Debe ser un enlace de YouTube válido.' });
+    return res.status(400).json({ error: 'URL no válida. Debe ser un enlace de YouTube, Instagram o Facebook válido.' });
   }
 
   logger.info('INFO', `Consultando metadatos para: ${videoUrl}`);
@@ -310,7 +326,7 @@ app.get('/api/info', async (req, res) => {
 
   try {
     const args = [
-      ...buildBaseYtdlpArgs(),
+      ...buildBaseYtdlpArgs(videoUrl),
       '--dump-single-json',
       '--no-playlist',
       videoUrl.trim()
@@ -330,9 +346,9 @@ app.get('/api/info', async (req, res) => {
         logger.error('YTDLP', `Error extrayendo información (código ${code})`, stderrData);
         let userMessage = 'No se pudo obtener información del video.';
         if (stderrData.includes('403: Forbidden')) {
-          userMessage = 'YouTube bloqueó la solicitud (HTTP 403 Forbidden). Los clientes alternativos se activarán al descargar.';
-        } else if (stderrData.includes('Sign in to confirm')) {
-          userMessage = 'El video requiere inicio de sesión en YouTube. Configura cookies en .env.';
+          userMessage = 'La plataforma bloqueó la solicitud (HTTP 403 Forbidden). Los clientes alternativos o cookies se activarán al descargar.';
+        } else if (stderrData.includes('Sign in to confirm') || stderrData.includes('Log in to Facebook')) {
+          userMessage = 'El video requiere inicio de sesión. Configura cookies en .env (YTDLP_COOKIES_BROWSER).';
         }
 
         return res.status(500).json({
@@ -353,9 +369,17 @@ app.get('/api/info', async (req, res) => {
         }
 
         const standardHeights = [2160, 1440, 1080, 720, 480, 360, 240, 144];
-        const availableHeights = standardHeights.filter(h => heights.has(h));
+        let availableHeights = standardHeights.filter(h => heights.has(h));
         if (availableHeights.length === 0 && heights.size > 0) {
           availableHeights.push(...Array.from(heights).sort((a, b) => b - a));
+        }
+
+        // Fallback para Facebook si los formatos no declaran height pero indican hd/sd
+        if (availableHeights.length === 0 && isFacebookUrl(videoUrl)) {
+          const hasHd = formats.some(f => (f.format_note && f.format_note.toLowerCase().includes('hd')) || (f.format_id && f.format_id.includes('hd')));
+          const hasSd = formats.some(f => (f.format_note && f.format_note.toLowerCase().includes('sd')) || (f.format_id && f.format_id.includes('sd')));
+          if (hasHd) availableHeights.push(720);
+          if (hasSd) availableHeights.push(480);
         }
 
         const videoQualities = [
@@ -388,14 +412,22 @@ app.get('/api/info', async (req, res) => {
           { id: 'mkv', label: 'MKV (Matroska alta calidad)' }
         ];
 
+        const defaultTitle = isFacebookUrl(videoUrl)
+          ? `Facebook Video ${raw.id || ''}`
+          : (isInstagramUrl(videoUrl) ? `Instagram Reel ${raw.id || ''}` : 'Video de YouTube');
+        const defaultUploader = isFacebookUrl(videoUrl)
+          ? 'Facebook'
+          : (isInstagramUrl(videoUrl) ? 'Instagram' : 'Desconocido');
+        const defaultThumb = raw.thumbnail || (raw.thumbnails && raw.thumbnails.length > 0 ? raw.thumbnails[raw.thumbnails.length - 1].url : '') || (isYouTubeUrl(videoUrl) ? `https://i.ytimg.com/vi/${raw.id}/hqdefault.jpg` : '');
+
         const responseData = {
           id: raw.id,
-          title: raw.title || 'Video de YouTube',
-          uploader: raw.uploader || raw.channel || 'Desconocido',
+          title: raw.title || defaultTitle,
+          uploader: raw.uploader || raw.channel || defaultUploader,
           channelUrl: raw.channel_url || raw.uploader_url || '',
           duration: raw.duration || 0,
           durationFormatted: formatDuration(raw.duration),
-          thumbnail: raw.thumbnail || `https://i.ytimg.com/vi/${raw.id}/hqdefault.jpg`,
+          thumbnail: defaultThumb,
           viewCount: raw.view_count || 0,
           videoQualities,
           videoFormats,
@@ -436,7 +468,7 @@ app.post('/api/download', (req, res) => {
 
   // Build command arguments
   const args = [
-    ...buildBaseYtdlpArgs(),
+    ...buildBaseYtdlpArgs(url),
     '--newline',
     '--progress-template', 'PROGRESS:%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s|%(progress.status)s|%(progress.total_bytes_estimate_str)s',
     '--no-playlist'

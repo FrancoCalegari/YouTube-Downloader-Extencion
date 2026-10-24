@@ -157,10 +157,23 @@ mkdir -p "$PROJECT_DIR/downloads"
 # ------------------------------------------------------------------------------
 # 5. Configuración del Servicio systemd
 # ------------------------------------------------------------------------------
-print_info "Configurando servicio systemd para inicio automático con la computadora..."
+# Determinar usuario y home reales (incluso si se ejecutó con sudo)
+if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ] && [ "$SUDO_USER" != "root" ]; then
+  TARGET_USER="$SUDO_USER"
+  TARGET_HOME="$(getent passwd "$TARGET_USER" 2>/dev/null | cut -d: -f6)"
+  TARGET_HOME="${TARGET_HOME:-$HOME}"
+  TARGET_UID="$(id -u "$TARGET_USER")"
+  RUN_AS_USER="sudo -u $TARGET_USER XDG_RUNTIME_DIR=/run/user/$TARGET_UID DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$TARGET_UID/bus"
+  print_info "Detectada ejecución con sudo. Instalando servicio en contexto del usuario: ${CLR_BOLD}${TARGET_USER}${CLR_RESET}"
+else
+  TARGET_USER="$USER"
+  TARGET_HOME="$HOME"
+  TARGET_UID="$(id -u 2>/dev/null || echo 1000)"
+  RUN_AS_USER=""
+fi
 
 # Usar servicio de usuario systemd (óptimo para escritorios, permisos de usuario y descargas)
-USER_SYSTEMD_DIR="$HOME/.config/systemd/user"
+USER_SYSTEMD_DIR="$TARGET_HOME/.config/systemd/user"
 mkdir -p "$USER_SYSTEMD_DIR"
 SERVICE_FILE="$USER_SYSTEMD_DIR/${SERVICE_NAME}.service"
 
@@ -185,16 +198,22 @@ StandardError=journal
 WantedBy=default.target
 EOF
 
+if [ "$EUID" -eq 0 ] && [ -n "$SUDO_USER" ]; then
+  chown -R "$TARGET_USER:$TARGET_USER" "$TARGET_HOME/.config/systemd" 2>/dev/null || true
+  chown -R "$TARGET_USER:$TARGET_USER" "$PROJECT_DIR/downloads" 2>/dev/null || true
+  chown "$TARGET_USER:$TARGET_USER" "$SERVICE_FILE" 2>/dev/null || true
+fi
+
 print_ok "Unidad de servicio creada en: $SERVICE_FILE"
 
-# Recargar systemd y habilitar servicio
-systemctl --user daemon-reload
-systemctl --user enable "${SERVICE_NAME}.service"
-systemctl --user restart "${SERVICE_NAME}.service"
+# Recargar systemd y habilitar servicio en el contexto del usuario
+$RUN_AS_USER systemctl --user daemon-reload
+$RUN_AS_USER systemctl --user enable "${SERVICE_NAME}.service"
+$RUN_AS_USER systemctl --user restart "${SERVICE_NAME}.service"
 
 # Habilitar persistencia (linger) para que inicie aunque no haya sesión gráfica abierta
 if command -v loginctl >/dev/null 2>&1; then
-  loginctl enable-linger "$USER" 2>/dev/null || true
+  loginctl enable-linger "$TARGET_USER" 2>/dev/null || true
 fi
 
 # ------------------------------------------------------------------------------

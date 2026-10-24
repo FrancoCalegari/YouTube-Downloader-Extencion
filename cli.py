@@ -71,7 +71,7 @@ def _print_banner():
         print(red(bold(BANNER_SIMPLE)))
     except Exception:
         print(BANNER_SIMPLE)
-    print(dim("   YouTube · TikTok · Instagram · Kick  |  Powered by yt-dlp"))
+    print(dim("   YouTube · TikTok · Instagram · Facebook · Kick  |  Powered by yt-dlp"))
     print()
 
 
@@ -168,13 +168,14 @@ def _resolve_audio_bitrate(bitrate_str: str) -> str:
 def main():
     parser = argparse.ArgumentParser(
         prog="cli.py",
-        description="Multi Downloader CLI — YouTube, TikTok, Instagram, Kick",
+        description="Multi Downloader CLI — YouTube, TikTok, Instagram, Facebook, Kick",
         formatter_class=argparse.RawTextHelpFormatter,
         epilog=(
             "Ejemplos:\n"
             "  python cli.py https://youtu.be/dQw4w9WgXcQ\n"
             "  python cli.py https://youtu.be/dQw4w9WgXcQ --audio\n"
             "  python cli.py https://youtu.be/dQw4w9WgXcQ -r 720p\n"
+            "  python cli.py https://www.facebook.com/reel/123456789\n"
             "  python cli.py https://www.tiktok.com/@user/video/123 -o ~/Videos\n"
             "  python cli.py https://www.instagram.com/reel/ABC -b firefox\n"
             "  python cli.py https://kick.com/user/videos/123\n"
@@ -226,7 +227,7 @@ def main():
     )
     parser.add_argument(
         "-p", "--platform",
-        choices=["auto", "youtube", "tiktok", "instagram", "kick"],
+        choices=["auto", "youtube", "tiktok", "instagram", "facebook", "kick"],
         default="auto",
         help="Forzar plataforma (default: auto-detectar por URL).",
     )
@@ -309,7 +310,7 @@ def main():
     # Validar URL
     if not _validate_url(url, platform):
         print(red("  ERROR: URL no reconocida para ninguna plataforma admitida."))
-        print(dim("  Plataformas: YouTube, YouTube Music, TikTok, Instagram Reels, Kick"))
+        print(dim("  Plataformas: YouTube, YouTube Music, TikTok, Instagram, Facebook, Kick"))
         print(dim("  Usa -p para forzar una plataforma especifica."))
         sys.exit(1)
 

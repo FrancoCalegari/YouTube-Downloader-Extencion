@@ -46,6 +46,9 @@ SUPPORTED_RE = re.compile(
     r'|vt\.tiktok\.com/'
     # Instagram
     r'|(www\.)?instagram\.com/(reels?|p|tv)/'
+    # Facebook
+    r'|(www\.|m\.|web\.)?facebook\.com/(watch/?\?v=|reel/|reels/|share/[vr]/|[\w.-]+/videos/|video\.php\?v=)'
+    r'|fb\.watch/'
     # Kick
     r'|(www\.)?kick\.com/[\w.-]+/(videos?/[\w-]+|clip/[\w-]+|[\S]*)'
     r')[\S]*$',
@@ -58,12 +61,14 @@ STANDARD_HEIGHTS = [144, 240, 360, 480, 720, 1080, 1440, 2160]
 # ── Helpers de plataforma ────────────────────────────────────────────────────
 
 def detect_platform(url: str) -> str:
-    """Devuelve 'youtube', 'tiktok', 'instagram' o 'kick' segun la URL."""
+    """Devuelve 'youtube', 'tiktok', 'instagram', 'facebook' o 'kick' segun la URL."""
     u = url.lower()
     if 'tiktok.com' in u:
         return 'tiktok'
     if 'instagram.com' in u:
         return 'instagram'
+    if 'facebook.com' in u or 'fb.watch' in u:
+        return 'facebook'
     if 'kick.com' in u:
         return 'kick'
     return 'youtube'
@@ -327,7 +332,7 @@ def build_ydl_opts(
     # Seleccion de formato
     if audio_only:
         fmt = "bestaudio/best"
-    elif plat in ("youtube", "kick"):
+    elif plat in ("youtube", "kick", "facebook"):
         if quality == "Mejor disponible":
             fmt = "bestvideo+bestaudio/best"
         elif quality.endswith("p") and quality[:-1].isdigit():

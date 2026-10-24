@@ -1,21 +1,23 @@
-/* YouTube Downloader In-Page Native Button Styles (100% Native YouTube Action Pill) */
+/* ==========================================================================
+   YouTube & Instagram Downloader Pro - In-Page Injected Styles
+   ========================================================================== */
+
+/* -------------------------------------------------------------
+   1. YouTube Standard Watch Page Action Button
+   ------------------------------------------------------------- */
 #ytdl-native-button.ytdl-native-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   
-  height: 40px;
-  line-height: 40px;
-  min-width: 125px;
+  height: 36px;
+  line-height: 36px;
+  min-width: 110px;
   padding: 0 16px;
   margin-left: 8px;
   
-  border-radius: 20px;
-  border-top-left-radius: 20px;
-  border-top-right-radius: 20px;
-  border-bottom-left-radius: 20px;
-  border-bottom-right-radius: 20px;
+  border-radius: 18px;
   border: none;
   
   background-attachment: scroll;
@@ -25,7 +27,7 @@
   background-color: var(--yt-spec-badge-chip-background, rgba(255, 255, 255, 0.1));
   
   color: var(--yt-spec-text-primary, rgb(241, 241, 241));
-  font-family: Roboto, Arial, sans-serif;
+  font-family: "Roboto", "Segoe UI", Arial, sans-serif;
   font-size: 14px;
   font-weight: 500;
   text-align: center;
@@ -38,12 +40,11 @@
   outline: none;
   box-shadow: none;
   
-  transition: background-color 0.2s cubic-bezier(0.05, 0, 0, 1);
+  transition: background-color 0.2s cubic-bezier(0.05, 0, 0, 1), transform 0.15s ease;
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0);
   z-index: 100;
 }
 
-/* Light mode support for YouTube */
 html:not([dark]) #ytdl-native-button.ytdl-native-btn {
   background-color: var(--yt-spec-badge-chip-background, rgba(0, 0, 0, 0.05));
   color: var(--yt-spec-text-primary, rgb(15, 15, 15));
@@ -51,46 +52,225 @@ html:not([dark]) #ytdl-native-button.ytdl-native-btn {
 
 #ytdl-native-button.ytdl-native-btn:hover {
   background-color: var(--yt-spec-button-chip-background-hover, rgba(255, 255, 255, 0.2));
-  transform: none;
-  box-shadow: none;
 }
 
 html:not([dark]) #ytdl-native-button.ytdl-native-btn:hover {
   background-color: var(--yt-spec-button-chip-background-hover, rgba(0, 0, 0, 0.1));
 }
 
-#ytdl-native-button.ytdl-native-btn:active {
-  background-color: rgba(255, 255, 255, 0.25);
-  transform: none;
-}
-
-html:not([dark]) #ytdl-native-button.ytdl-native-btn:active {
-  background-color: rgba(0, 0, 0, 0.15);
-}
-
 #ytdl-native-button.ytdl-native-btn svg {
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
   fill: currentColor;
   flex-shrink: 0;
 }
 
-/* Floating quick menu */
+/* -------------------------------------------------------------
+   2. YouTube Shorts Native Action Button
+   ------------------------------------------------------------- */
+.ytdl-shorts-btn-host {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  margin-top: 16px !important;
+}
+
+.ytdl-shorts-download-btn {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 50% !important;
+  background-color: rgba(255, 255, 255, 0.12) !important;
+  border: none !important;
+  color: #ffffff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: background-color 0.2s ease, transform 0.15s ease !important;
+  padding: 0 !important;
+  position: relative !important;
+  outline: none !important;
+}
+
+.ytdl-shorts-download-btn:hover {
+  background-color: rgba(255, 255, 255, 0.25) !important;
+  transform: scale(1.05) !important;
+}
+
+.ytdl-shorts-download-btn:active {
+  transform: scale(0.95) !important;
+}
+
+.ytdl-shorts-download-btn svg {
+  width: 24px !important;
+  height: 24px !important;
+  fill: currentColor !important;
+}
+
+.ytdl-shorts-label {
+  font-family: "Roboto", Arial, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: #ffffff !important;
+  margin-top: 6px !important;
+  text-align: center !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Shorts Floating Quick Menu (docked to the left of the button) */
+.ytdl-shorts-menu {
+  position: absolute !important;
+  right: 60px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  background: rgba(18, 18, 20, 0.95) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 14px !important;
+  padding: 8px !important;
+  width: 210px !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.75) !important;
+  z-index: 999999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  animation: ytdlSlideLeft 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+@keyframes ytdlSlideLeft {
+  from { opacity: 0; transform: translateY(-50%) translateX(10px); }
+  to { opacity: 1; transform: translateY(-50%) translateX(0); }
+}
+
+/* -------------------------------------------------------------
+   3. Instagram In-Page Action Button & Menus
+   ------------------------------------------------------------- */
+/* Instagram Reels Action Bar Item */
+.ytdl-ig-reel-container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  margin: 12px 0 !important;
+}
+
+.ytdl-ig-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: transparent !important;
+  border: none !important;
+  border-radius: 50% !important;
+  width: 44px !important;
+  height: 44px !important;
+  cursor: pointer !important;
+  color: inherit !important;
+  transition: background-color 0.2s ease, transform 0.15s ease !important;
+  padding: 8px !important;
+  position: relative !important;
+  outline: none !important;
+}
+
+.ytdl-ig-btn:hover {
+  background-color: rgba(255, 255, 255, 0.15) !important;
+  transform: scale(1.08) !important;
+}
+
+.ytdl-ig-btn:active {
+  transform: scale(0.95) !important;
+}
+
+.ytdl-ig-btn svg {
+  width: 24px !important;
+  height: 24px !important;
+  fill: currentColor !important;
+}
+
+.ytdl-ig-label {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: inherit !important;
+  margin-top: 4px !important;
+  text-align: center !important;
+}
+
+/* Instagram Post Toolbar Button (Feed / Modal / /p/) */
+.ytdl-ig-post-btn-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  position: relative !important;
+  margin-left: 6px !important;
+}
+
+.ytdl-ig-post-btn {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 50% !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 8px !important;
+  color: inherit !important;
+  transition: transform 0.15s ease, opacity 0.15s ease !important;
+  outline: none !important;
+}
+
+.ytdl-ig-post-btn:hover {
+  opacity: 0.75 !important;
+  transform: scale(1.1) !important;
+}
+
+.ytdl-ig-post-btn svg {
+  width: 24px !important;
+  height: 24px !important;
+  fill: currentColor !important;
+}
+
+/* Instagram Floating Menu */
+.ytdl-ig-menu {
+  position: absolute !important;
+  bottom: 52px !important;
+  right: 0 !important;
+  background: rgba(24, 24, 27, 0.96) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 14px !important;
+  padding: 8px !important;
+  width: 230px !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7) !important;
+  z-index: 999999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  animation: ytdlFadeIn 0.18s ease-out !important;
+}
+
+/* -------------------------------------------------------------
+   4. Shared Dropdown Menu Items & Styles
+   ------------------------------------------------------------- */
 .ytdl-quick-modal {
   position: absolute;
-  top: 46px;
+  top: 44px;
   right: 0;
   background: rgba(24, 24, 27, 0.96);
-  backdrop-filter: blur(16px);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 14px;
-  padding: 10px;
+  padding: 8px;
   width: 220px;
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
-  z-index: 9999;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.65);
+  z-index: 999999;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
   animation: ytdlFadeIn 0.18s ease-out;
 }
 
@@ -103,54 +283,190 @@ html:not([dark]) #ytdl-native-button.ytdl-native-btn:active {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 8px 12px;
+  padding: 9px 12px;
   color: #f4f4f5;
   background: transparent;
   border: none;
   border-radius: 8px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 13px;
   font-weight: 500;
   text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease;
+  transition: background 0.15s ease, color 0.15s ease;
   width: 100%;
+  box-sizing: border-box;
 }
 
 .ytdl-menu-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
 }
 
 .ytdl-menu-item .icon {
   font-size: 16px;
+  line-height: 1;
+}
+
+.ytdl-menu-item.action-subtext {
+  font-size: 11px;
+  opacity: 0.75;
 }
 
 .ytdl-menu-divider {
   height: 1px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
   margin: 4px 0;
 }
 
-/* Floating Toast Notification */
+/* -------------------------------------------------------------
+   5. Interactive Toast Notifications
+   ------------------------------------------------------------- */
 .ytdl-toast {
   position: fixed;
   bottom: 24px;
   right: 24px;
   background: #18181b;
   color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.16);
   border-radius: 12px;
   padding: 12px 20px;
-  font-size: 14px;
-  font-family: system-ui, -apple-system, sans-serif;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   gap: 12px;
-  z-index: 1000000;
+  z-index: 10000000;
   animation: ytdlSlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  max-width: 380px;
+  line-height: 1.4;
+}
+
+.ytdl-toast-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+.ytdl-toast-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ytdl-toast-title {
+  font-weight: 600;
+}
+
+.ytdl-toast-message {
+  font-size: 12px;
+  color: #d4d4d8;
 }
 
 @keyframes ytdlSlideUp {
   from { opacity: 0; transform: translateY(20px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* -------------------------------------------------------------
+   6. Facebook Reels & Post Injections
+   ------------------------------------------------------------- */
+.ytdl-fb-reel-container {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  position: relative !important;
+  margin: 12px 0 !important;
+}
+
+.ytdl-fb-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: none !important;
+  border-radius: 50% !important;
+  width: 44px !important;
+  height: 44px !important;
+  cursor: pointer !important;
+  color: #ffffff !important;
+  transition: background-color 0.2s ease, transform 0.15s ease !important;
+  padding: 8px !important;
+  position: relative !important;
+  outline: none !important;
+}
+
+.ytdl-fb-btn:hover {
+  background-color: rgba(255, 255, 255, 0.24) !important;
+  transform: scale(1.08) !important;
+}
+
+.ytdl-fb-btn svg {
+  width: 24px !important;
+  height: 24px !important;
+  fill: #ffffff !important;
+}
+
+.ytdl-fb-label {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: #ffffff !important;
+  margin-top: 4px !important;
+  text-align: center !important;
+}
+
+.ytdl-fb-post-btn-wrapper {
+  display: inline-flex !important;
+  align-items: center !important;
+  position: relative !important;
+  margin-left: 6px !important;
+}
+
+.ytdl-fb-post-btn {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  padding: 6px 10px !important;
+  color: inherit !important;
+  font-family: inherit !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  transition: background 0.15s ease, transform 0.1s ease !important;
+  outline: none !important;
+}
+
+.ytdl-fb-post-btn:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+.ytdl-fb-post-btn svg {
+  width: 18px !important;
+  height: 18px !important;
+  fill: currentColor !important;
+}
+
+.ytdl-fb-menu {
+  position: absolute !important;
+  bottom: 48px !important;
+  right: 0 !important;
+  background: rgba(24, 24, 27, 0.96) !important;
+  backdrop-filter: blur(20px) !important;
+  -webkit-backdrop-filter: blur(20px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.14) !important;
+  border-radius: 12px !important;
+  padding: 8px !important;
+  width: 230px !important;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.7) !important;
+  z-index: 999999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+
